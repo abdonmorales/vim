@@ -1421,19 +1421,26 @@ intro_message(
     char	*p;
     static char	*(lines[]) =
     {
-	N_("VIM - Vi IMproved"),
+	N_("UTCS VIM - Vi Improved 9.1"),
 	"",
-	N_("version "),
-	N_("by Bram Moolenaar et al."),
+	N_("VIM version "),
+	N_("UTCS Version 1.0"),
+	"",
+	N_("by Abdon Morales"),
+	N_("The University of Texas at Austin"),
+	N_("The Department of Computer Science"),
+	"",
 #ifdef MODIFIED_BY
 	" ",
 #endif
 	N_("Vim is open source and freely distributable"),
 	"",
-	N_("Help poor children in Uganda!"),
+	N_("For UT CS students, don't forget the basic Vim commands:"),
 	N_("type  :help iccf<Enter>       for information "),
 	"",
-	N_("type  :q<Enter>               to exit         "),
+	N_("type  (:q or :q!)<Enter>      to exit         "),
+	N_("type  :i<Enter>               to insert text  "),
+	N_("type  :w<Enter>               to save changes "),
 	N_("type  :help<Enter>  or  <F1>  for on-line help"),
 	N_("type  :help version9<Enter>   for version info"),
 	NULL,
