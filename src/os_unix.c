@@ -3048,7 +3048,7 @@ mch_copy_sec(char_u *from_file, char_u *to_file)
 
     size = listxattr((char *)from_file, NULL, 0);
     // not supported or no attributes to copy
-    if (errno == ENOTSUP || size == 0)
+    if (size <= 0)
 	return;
 
     for (index = 0 ; index < (int)(sizeof(smack_copied_attributes)
@@ -3112,8 +3112,8 @@ mch_copy_sec(char_u *from_file, char_u *to_file)
 mch_copy_xattr(char_u *from_file, char_u *to_file)
 {
     char	*xattr_buf;
-    size_t	size;
-    size_t	tsize;
+    ssize_t	size;
+    ssize_t	tsize;
     ssize_t	keylen, vallen, max_vallen = 0;
     char	*key;
     char	*val = NULL;
@@ -3125,7 +3125,7 @@ mch_copy_xattr(char_u *from_file, char_u *to_file)
     // get the length of the extended attributes
     size = listxattr((char *)from_file, NULL, 0);
     // not supported or no attributes to copy
-    if (errno == ENOTSUP || size == 0)
+    if (size <= 0)
 	return;
     xattr_buf = (char*)alloc(size);
     if (xattr_buf == NULL)
@@ -7494,7 +7494,19 @@ gpm_open(void)
 	return 1; // succeed
     }
     if (gpm_fd == -2)
+    {
 	Gpm_Close(); // We don't want to talk to xterm via gpm
+
+        // Gpm_Close fails to properly restore the WINCH and TSTP handlers,
+        // leading to Vim ignoring resize signals. We have to re-initialize
+        // these handlers again here.
+# ifdef SIGWINCH
+	mch_signal(SIGWINCH, sig_winch);
+# endif
+# ifdef SIGTSTP
+	mch_signal(SIGTSTP, restricted ? SIG_IGN : sig_tstp);
+# endif
+    }
     return 0;
 }
 

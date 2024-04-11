@@ -215,6 +215,9 @@ estack_sfile(estack_arg_T which UNUSED)
 	    if (*class_name != NUL)
 	    {
 		// For class methods prepend "<class name>." to the function name.
+		ga_concat(&ga, (char_u *)"<SNR>");
+		ga.ga_len += vim_snprintf((char *)ga.ga_data + ga.ga_len, 23,
+		       "%d_", entry->es_info.ufunc->uf_script_ctx.sc_sid);
 		ga_concat(&ga, class_name);
 		ga_append(&ga, '.');
 	    }
@@ -1690,6 +1693,8 @@ do_source_ext(
 	    // reset version, "vim9script" may have been added or removed.
 	    si->sn_version = 1;
 	}
+	if (ret_sid != NULL)
+	    *ret_sid = sid;
     }
     else
     {
