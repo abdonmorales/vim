@@ -650,7 +650,7 @@ def Test_assign_index()
       var bl = 0z11
       bl[1] = g:val
   END
-  v9.CheckDefExecAndScriptFailure(lines, 'E1030: Using a String as a Number: "22"')
+  v9.CheckDefExecAndScriptFailure(lines, ['E1030: Using a String as a Number: "22"', 'E1012: Type mismatch; expected number but got string'])
 
   # should not read the next line when generating "a.b"
   var a = {}
@@ -2981,6 +2981,66 @@ def Test_heredoc_expr()
       var d = x{a1}x{a2}x{a3}x{a4}
     END
     assert_equal(['var a = 15', 'var b = 6 + 6', 'var c = "local"', 'var d = x1x2x3x'], code)
+  CODE
+  v9.CheckDefAndScriptSuccess(lines)
+
+  # Evaluate a dictionary
+  lines =<< trim CODE
+    var d1 = {'a': 10, 'b': [1, 2]}
+    var code =<< trim eval END
+      var d2 = {d1}
+    END
+    assert_equal(["var d2 = {'a': 10, 'b': [1, 2]}"], code)
+  CODE
+  v9.CheckDefAndScriptSuccess(lines)
+
+  # Evaluate an empty dictionary
+  lines =<< trim CODE
+    var d1 = {}
+    var code =<< trim eval END
+      var d2 = {d1}
+    END
+    assert_equal(["var d2 = {}"], code)
+  CODE
+  v9.CheckDefAndScriptSuccess(lines)
+
+  # Evaluate a null dictionary
+  lines =<< trim CODE
+    var d1 = test_null_dict()
+    var code =<< trim eval END
+      var d2 = {d1}
+    END
+    assert_equal(["var d2 = {}"], code)
+  CODE
+  v9.CheckDefAndScriptSuccess(lines)
+
+  # Evaluate a List
+  lines =<< trim CODE
+    var l1 = ['a', 'b', 'c']
+    var code =<< trim eval END
+      var l2 = {l1}
+    END
+    assert_equal(["var l2 = ['a', 'b', 'c']"], code)
+  CODE
+  v9.CheckDefAndScriptSuccess(lines)
+
+  # Evaluate an empty List
+  lines =<< trim CODE
+    var l1 = []
+    var code =<< trim eval END
+      var l2 = {l1}
+    END
+    assert_equal(["var l2 = []"], code)
+  CODE
+  v9.CheckDefAndScriptSuccess(lines)
+
+  # Evaluate a null List
+  lines =<< trim CODE
+    var l1 = test_null_list()
+    var code =<< trim eval END
+      var l2 = {l1}
+    END
+    assert_equal(["var l2 = []"], code)
   CODE
   v9.CheckDefAndScriptSuccess(lines)
 

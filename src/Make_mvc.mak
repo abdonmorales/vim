@@ -187,7 +187,7 @@ MINOR=		1
 !ENDIF
 
 !IF ![$(PS) $(PSFLAGS) try{Out-File -FilePath '.\patchlvl.tmp' -InputObject \
-	\"PATCHLEVEL=$$(((Get-Content -Path '.\version.c' \
+	\"PATCHLEVEL=$$([decimal^]((Get-Content -Path '.\version.c' \
 	-TotalCount ((Select-String -Pattern 'static int included_patches' \
 	-Path '.\version.c').LineNumber+3))[-1^]).Trim().TrimEnd(','))\"} \
 	catch{exit 1}]
@@ -1320,6 +1320,10 @@ $(OUTDIR):
 	if not exist $(OUTDIR)/nul  mkdir $(OUTDIR:/=\)
 
 CFLAGS_INST = /nologo /O2 -DNDEBUG -DWIN32 -DWINVER=$(WINVER) -D_WIN32_WINNT=$(WINVER) $(CFLAGS_DEPR)
+
+!IFDEF PATCHLEVEL
+CFLAGS_INST=	$(CFLAGS_INST) -DVIM_VERSION_PATCHLEVEL=$(PATCHLEVEL)
+!ENDIF
 
 install.exe: dosinst.c dosinst.h version.h
 	$(CC) $(CFLAGS_INST) dosinst.c kernel32.lib shell32.lib \

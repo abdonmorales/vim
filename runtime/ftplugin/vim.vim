@@ -1,7 +1,7 @@
 " Vim filetype plugin
 " Language:		Vim
 " Maintainer:		Doug Kearns <dougkearns@gmail.com>
-" Last Change:		2024 Apr 08
+" Last Change:		2024 Apr 13
 " Former Maintainer:	Bram Moolenaar <Bram@vim.org>
 
 " Only do this when not done yet for this buffer

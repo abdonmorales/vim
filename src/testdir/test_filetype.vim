@@ -155,16 +155,17 @@ def s:GetFilenameChecks(): dict<list<string>>
     chuck: ['file.ck'],
     cl: ['file.eni'],
     clean: ['file.dcl', 'file.icl'],
-    clojure: ['file.clj', 'file.cljs', 'file.cljx', 'file.cljc'],
+    clojure: ['file.clj', 'file.cljs', 'file.cljx', 'file.cljc', 'init.trans', 'any/etc/translate-shell', '.trans'],
     cmake: ['CMakeLists.txt', 'file.cmake', 'file.cmake.in'],
+    cmakecache: ['CMakeCache.txt'],
     cmod: ['file.cmod'],
     cmusrc: ['any/.cmus/autosave', 'any/.cmus/rc', 'any/.cmus/command-history', 'any/.cmus/file.theme', 'any/cmus/rc', 'any/cmus/file.theme', '/.cmus/autosave', '/.cmus/command-history', '/.cmus/file.theme', '/.cmus/rc', '/cmus/file.theme', '/cmus/rc'],
     cobol: ['file.cbl', 'file.cob', 'file.lib'],
     coco: ['file.atg'],
     conaryrecipe: ['file.recipe'],
-    conf: ['auto.master', 'file.conf'],
+    conf: ['auto.master', 'file.conf', 'texdoc.cnf', '.x11vncrc', '.chktexrc', '.ripgreprc', 'ripgreprc', 'file.ctags', '.mbsyncrc'],
     config: ['configure.in', 'configure.ac', '/etc/hostname.file', 'any/etc/hostname.file'],
-    confini: ['/etc/pacman.conf', 'any/etc/pacman.conf', 'mpv.conf', 'any/.aws/config', 'any/.aws/credentials', 'file.nmconnection'],
+    confini: ['pacman.conf', 'paru.conf', 'mpv.conf', 'any/.aws/config', 'any/.aws/credentials', 'file.nmconnection'],
     context: ['tex/context/any/file.tex', 'file.mkii', 'file.mkiv', 'file.mkvi', 'file.mkxl', 'file.mklx'],
     cook: ['file.cook'],
     corn: ['file.corn'],
@@ -212,7 +213,14 @@ def s:GetFilenameChecks(): dict<list<string>>
     dnsmasq: ['/etc/dnsmasq.conf', '/etc/dnsmasq.d/file', 'any/etc/dnsmasq.conf', 'any/etc/dnsmasq.d/file'],
     dockerfile: ['Containerfile', 'Dockerfile', 'dockerfile', 'file.Dockerfile', 'file.dockerfile', 'Dockerfile.debian', 'Containerfile.something'],
     dosbatch: ['file.bat'],
-    dosini: ['/etc/yum.conf', 'file.ini', 'npmrc', '.npmrc', 'php.ini', 'php.ini-5', 'php.ini-file', '/etc/yum.repos.d/file', 'any/etc/yum.conf', 'any/etc/yum.repos.d/file', 'file.wrap', 'file.vbp', 'ja2.ini', 'JA2.INI', 'mimeapps.list', 'pip.conf', 'setup.cfg', 'pudb.cfg', '.coveragerc', 'psprint.conf', 'sofficerc', 'any/.config/lxqt/globalkeyshortcuts.conf', 'any/.config/screengrab/screengrab.conf'],
+    dosini: ['/etc/yum.conf', '/etc/nfs.conf', '/etc/nfsmount.conf', 'file.ini',
+             'npmrc', '.npmrc', 'php.ini', 'php.ini-5', 'php.ini-file',
+             '/etc/yum.repos.d/file', 'any/etc/yum.conf', 'any/etc/yum.repos.d/file', 'file.wrap',
+             'file.vbp', 'ja2.ini', 'JA2.INI', 'mimeapps.list', 'pip.conf', 'setup.cfg', 'pudb.cfg',
+             '.coveragerc', '.pypirc', '.gitlint', '.oelint.cfg', 'pylintrc', '.pylintrc',
+             '/home/user/.config/bpython/config', '/home/user/.config/mypy/config', '.wakatime.cfg', '.replyrc',
+             'psprint.conf', 'sofficerc', 'any/.config/lxqt/globalkeyshortcuts.conf', 'any/.config/screengrab/screengrab.conf',
+             'any/.local/share/flatpak/repo/config', '.notmuch-config'],
     dot: ['file.dot', 'file.gv'],
     dracula: ['file.drac', 'file.drc', 'filelvs', 'filelpe', 'drac.file', 'lpe', 'lvs', 'some-lpe', 'some-lvs'],
     dtd: ['file.dtd'],
@@ -336,6 +344,7 @@ def s:GetFilenameChecks(): dict<list<string>>
     inform: ['file.inf', 'file.INF'],
     initng: ['/etc/initng/any/file.i', 'file.ii', 'any/etc/initng/any/file.i'],
     inittab: ['inittab'],
+    inko: ['file.inko'],
     ipfilter: ['ipf.conf', 'ipf6.conf', 'ipf.rules'],
     iss: ['file.iss'],
     ist: ['file.ist', 'file.mst'],
@@ -345,17 +354,18 @@ def s:GetFilenameChecks(): dict<list<string>>
     janet: ['file.janet'],
     java: ['file.java', 'file.jav'],
     javacc: ['file.jj', 'file.jjt'],
-    javascript: ['file.js', 'file.jsm', 'file.javascript', 'file.es', 'file.mjs', 'file.cjs'],
+    javascript: ['file.js', 'file.jsm', 'file.javascript', 'file.es', 'file.mjs', 'file.cjs', '.node_repl_history'],
     'javascript.glimmer': ['file.gjs'],
     javascriptreact: ['file.jsx'],
     jess: ['file.clp'],
     jgraph: ['file.jgr'],
+    jj: ['file.jjdescription'],
     jq: ['file.jq'],
     jovial: ['file.jov', 'file.j73', 'file.jovial'],
     jproperties: ['file.properties', 'file.properties_xx', 'file.properties_xx_xx', 'some.properties_xx_xx_file', 'org.eclipse.xyz.prefs'],
-    json: ['file.json', 'file.jsonp', 'file.json-patch', 'file.geojson', 'file.webmanifest', 'Pipfile.lock', 'file.ipynb', 'file.jupyterlab-settings', '.prettierrc', '.firebaserc', '.stylelintrc', 'file.slnf', 'file.sublime-project', 'file.sublime-settings', 'file.sublime-workspace', 'file.bd', 'file.bda', 'file.xci'],
+    json: ['file.json', 'file.jsonp', 'file.json-patch', 'file.geojson', 'file.webmanifest', 'Pipfile.lock', 'file.ipynb', 'file.jupyterlab-settings', '.prettierrc', '.firebaserc', '.stylelintrc', 'file.slnf', 'file.sublime-project', 'file.sublime-settings', 'file.sublime-workspace', 'file.bd', 'file.bda', 'file.xci', 'flake.lock'],
     json5: ['file.json5'],
-    jsonc: ['file.jsonc', '.babelrc', '.eslintrc', '.jsfmtrc', '.jshintrc', '.hintrc', '.swrc', 'jsconfig.json', 'tsconfig.json', 'tsconfig.test.json', 'tsconfig-test.json', '.luaurc'],
+    jsonc: ['file.jsonc', '.babelrc', '.eslintrc', '.jsfmtrc', '.jshintrc', '.jscsrc', '.vsconfig', '.hintrc', '.swrc', 'jsconfig.json', 'tsconfig.json', 'tsconfig.test.json', 'tsconfig-test.json', '.luaurc'],
     jsonl: ['file.jsonl'],
     jsonnet: ['file.jsonnet', 'file.libsonnet'],
     jsp: ['file.jsp'],
@@ -399,17 +409,17 @@ def s:GetFilenameChecks(): dict<list<string>>
     lpc: ['file.lpc', 'file.ulpc'],
     lsl: ['file.lsl'],
     lss: ['file.lss'],
-    lua: ['file.lua', 'file.tlu', 'file.rockspec', 'file.nse', '.luacheckrc', '.busted', 'rock_manifest', 'config.ld'],
+    lua: ['file.lua', 'file.tlu', 'file.rockspec', 'file.nse', '.lua_history', '.luacheckrc', '.busted', 'rock_manifest', 'config.ld'],
     luau: ['file.luau'],
     lynx: ['lynx.cfg'],
     lyrics: ['file.lrc'],
     m3build: ['m3makefile', 'm3overrides'],
     m3quake: ['file.quake', 'cm3.cfg'],
-    m4: ['file.at'],
+    m4: ['file.at', '.m4_history'],
     mail: ['snd.123', '.letter', '.letter.123', '.followup', '.article', '.article.123', 'pico.123', 'mutt-xx-xxx', 'muttng-xx-xxx', 'ae123.txt', 'file.eml', 'reportbug-file'],
     mailaliases: ['/etc/mail/aliases', '/etc/aliases', 'any/etc/aliases', 'any/etc/mail/aliases'],
     mailcap: ['.mailcap', 'mailcap'],
-    make: ['file.mk', 'file.mak', 'file.dsp', 'makefile', 'Makefile', 'makefile-file', 'Makefile-file', 'some-makefile', 'some-Makefile'],
+    make: ['file.mk', 'file.mak', 'file.dsp', 'makefile', 'Makefile', 'makefile-file', 'Makefile-file', 'some-makefile', 'some-Makefile', 'Kbuild'],
     mallard: ['file.page'],
     man: ['file.man'],
     manconf: ['/etc/man.conf', 'man.config', 'any/etc/man.conf'],
@@ -469,6 +479,7 @@ def s:GetFilenameChecks(): dict<list<string>>
     msidl: ['file.odl', 'file.mof'],
     msql: ['file.msql'],
     mojo: ['file.mojo', 'file.🔥'],
+    msmtp: ['.msmtprc'],
     mupad: ['file.mu'],
     mush: ['file.mush'],
     mustache: ['file.mustache'],
@@ -509,6 +520,7 @@ def s:GetFilenameChecks(): dict<list<string>>
     octave: ['octaverc', '.octaverc', 'octave.conf', 'any/.local/share/octave/history'],
     odin: ['file.odin'],
     omnimark: ['file.xom', 'file.xin'],
+    ondir: ['.ondirrc'],
     opam: ['opam', 'file.opam', 'file.opam.template'],
     openroad: ['file.or'],
     openscad: ['file.scad'],
@@ -567,7 +579,7 @@ def s:GetFilenameChecks(): dict<list<string>>
     pymanifest: ['MANIFEST.in'],
     pyret: ['file.arr'],
     pyrex: ['file.pyx', 'file.pxd'],
-    python: ['file.py', 'file.pyw', '.pythonstartup', '.pythonrc', 'file.ptl', 'file.pyi', 'SConstruct'],
+    python: ['file.py', 'file.pyw', '.pythonstartup', '.pythonrc', '.python_history', '.jline-jython.history', 'file.ptl', 'file.pyi', 'SConstruct'],
     ql: ['file.ql', 'file.qll'],
     qml: ['file.qml', 'file.qbs'],
     qmldir: ['qmldir'],
@@ -585,7 +597,7 @@ def s:GetFilenameChecks(): dict<list<string>>
     readline: ['.inputrc', 'inputrc'],
     rego: ['file.rego'],
     remind: ['.reminders', 'file.remind', 'file.rem', '.reminders-file'],
-    requirements: ['file.pip', 'requirements.txt'],
+    requirements: ['file.pip', 'requirements.txt', 'dev-requirements.txt', 'constraints.txt', 'requirements.in', 'requirements/dev.txt', 'requires/dev.txt'],
     rescript: ['file.res', 'file.resi'],
     resolv: ['resolv.conf'],
     reva: ['file.frt'],
@@ -607,7 +619,7 @@ def s:GetFilenameChecks(): dict<list<string>>
     rrst: ['file.rrst', 'file.srst'],
     rst: ['file.rst'],
     rtf: ['file.rtf'],
-    ruby: ['.irbrc', 'irbrc', 'file.rb', 'file.rbw', 'file.gemspec', 'file.ru', 'Gemfile', 'file.builder', 'file.rxml', 'file.rjs', 'file.rant', 'file.rake', 'rakefile', 'Rakefile', 'rantfile', 'Rantfile', 'rakefile-file', 'Rakefile-file', 'Puppetfile', 'Vagrantfile'],
+    ruby: ['.irbrc', 'irbrc', '.irb_history', 'irb_history', 'file.rb', 'file.rbw', 'file.gemspec', 'file.ru', 'Gemfile', 'file.builder', 'file.rxml', 'file.rjs', 'file.rant', 'file.rake', 'rakefile', 'Rakefile', 'rantfile', 'Rantfile', 'rakefile-file', 'Rakefile-file', 'Puppetfile', 'Vagrantfile'],
     rust: ['file.rs'],
     samba: ['smb.conf'],
     sas: ['file.sas'],
@@ -627,7 +639,10 @@ def s:GetFilenameChecks(): dict<list<string>>
     services: ['/etc/services', 'any/etc/services'],
     setserial: ['/etc/serial.conf', 'any/etc/serial.conf'],
     sexplib: ['file.sexp'],
-    sh: ['.bashrc', '.bash_profile', '.bash-profile', '.bash_logout', '.bash-logout', '.bash_aliases', '.bash-aliases', '.bash_history', '.bash-history', '/tmp/bash-fc-3Ozjlw', '/tmp/bash-fc.3Ozjlw', 'PKGBUILD', 'APKBUILD', 'file.bash', '/usr/share/doc/bash-completion/filter.sh', '/etc/udev/cdsymlinks.conf', 'any/etc/udev/cdsymlinks.conf', 'file.bats'],
+    sh: ['.bashrc', '.bash_profile', '.bash-profile', '.bash_logout', '.bash-logout', '.bash_aliases', '.bash-aliases', '.bash_history', '.bash-history',
+         '/tmp/bash-fc-3Ozjlw', '/tmp/bash-fc.3Ozjlw', 'PKGBUILD', 'APKBUILD', 'file.bash', '/usr/share/doc/bash-completion/filter.sh',
+         '/etc/udev/cdsymlinks.conf', 'any/etc/udev/cdsymlinks.conf', 'file.bats', '.ash_history', 'any/etc/neofetch/config.conf', '.xprofile',
+         'user-dirs.defaults', 'user-dirs.dirs', 'makepkg.conf', '.makepkg.conf'],
     sieve: ['file.siv', 'file.sieve'],
     sil: ['file.sil'],
     simula: ['file.sim'],
@@ -658,7 +673,7 @@ def s:GetFilenameChecks(): dict<list<string>>
     spice: ['file.sp', 'file.spice'],
     spup: ['file.speedup', 'file.spdata', 'file.spd'],
     spyce: ['file.spy', 'file.spi'],
-    sql: ['file.tyb', 'file.tyc', 'file.pkb', 'file.pks'],
+    sql: ['file.tyb', 'file.tyc', 'file.pkb', 'file.pks', '.sqlite_history'],
     sqlj: ['file.sqlj'],
     prql: ['file.prql'],
     sqr: ['file.sqr', 'file.sqi'],
@@ -673,6 +688,7 @@ def s:GetFilenameChecks(): dict<list<string>>
     starlark: ['file.ipd', 'file.star', 'file.starlark'],
     stata: ['file.ado', 'file.do', 'file.imata', 'file.mata'],
     stp: ['file.stp'],
+    stylus: ['a.styl', 'file.stylus'],
     sudoers: ['any/etc/sudoers', 'sudoers.tmp', '/etc/sudoers', 'any/etc/sudoers.d/file'],
     supercollider: ['file.quark'],
     surface: ['file.sface'],
@@ -730,14 +746,15 @@ def s:GetFilenameChecks(): dict<list<string>>
     tal: ['file.tal'],
     taskdata: ['pending.data', 'completed.data', 'undo.data'],
     taskedit: ['file.task'],
-    tcl: ['file.tcl', 'file.tm', 'file.tk', 'file.itcl', 'file.itk', 'file.jacl', '.tclshrc', 'tclsh.rc', '.wishrc'],
+    tcl: ['file.tcl', 'file.tm', 'file.tk', 'file.itcl', 'file.itk', 'file.jacl', '.tclshrc', 'tclsh.rc', '.wishrc', '.tclsh-history', '.xsctcmdhistory', '.xsdbcmdhistory'],
     tablegen: ['file.td'],
     teal: ['file.tl'],
+    templ: ['file.templ'],
     template: ['file.tmpl'],
     teraterm: ['file.ttl'],
     terminfo: ['file.ti'],
     'terraform-vars': ['file.tfvars'],
-    tex: ['file.latex', 'file.sty', 'file.dtx', 'file.ltx', 'file.bbl', 'any/.texlive/texmf-config/tex/latex/file/file.cfg', 'file.pgf', 'file.nlo', 'file.nls', 'file.out', 'file.thm', 'file.eps_tex', 'file.pygtex', 'file.pygstyle', 'file.clo', 'file.aux', 'file.brf', 'file.ind', 'file.lof', 'file.loe', 'file.nav', 'file.vrb', 'file.ins', 'file.tikz', 'file.bbx', 'file.cbx', 'file.beamer'],
+    tex: ['file.latex', 'file.sty', 'file.dtx', 'file.ltx', 'file.bbl', 'any/.texlive/texmf-config/tex/latex/file/file.cfg', 'file.pgf', 'file.nlo', 'file.nls', 'file.thm', 'file.eps_tex', 'file.pygtex', 'file.pygstyle', 'file.clo', 'file.aux', 'file.brf', 'file.ind', 'file.lof', 'file.loe', 'file.nav', 'file.vrb', 'file.ins', 'file.tikz', 'file.bbx', 'file.cbx', 'file.beamer'],
     texinfo: ['file.texinfo', 'file.texi', 'file.txi'],
     texmf: ['texmf.cnf'],
     text: ['file.text', 'file.txt', 'README', 'LICENSE', 'COPYING', 'AUTHORS', '/usr/share/doc/bash-completion/AUTHORS', '/etc/apt/apt.conf.d/README', '/etc/Muttrc.d/README'],
@@ -748,7 +765,7 @@ def s:GetFilenameChecks(): dict<list<string>>
     tla: ['file.tla'],
     tli: ['file.tli'],
     tmux: ['tmuxfile.conf', '.tmuxfile.conf', '.tmux-file.conf', '.tmux.conf', 'tmux-file.conf', 'tmux.conf', 'tmux.conf.local'],
-    toml: ['file.toml', 'Gopkg.lock', 'Pipfile', '/home/user/.cargo/config'],
+    toml: ['file.toml', 'Gopkg.lock', 'Pipfile', '/home/user/.cargo/config', '.black'],
     tpp: ['file.tpp'],
     treetop: ['file.treetop'],
     trustees: ['trustees.conf'],
@@ -758,7 +775,7 @@ def s:GetFilenameChecks(): dict<list<string>>
     tssop: ['file.tssop'],
     tsv: ['file.tsv'],
     twig: ['file.twig'],
-    typescript: ['file.mts', 'file.cts'],
+    typescript: ['file.mts', 'file.cts', '.ts_node_repl_history'],
     'typescript.glimmer': ['file.gts'],
     typescriptreact: ['file.tsx'],
     typespec: ['file.tsp'],
@@ -826,7 +843,7 @@ def s:GetFilenameChecks(): dict<list<string>>
     xsd: ['file.xsd'],
     xslt: ['file.xsl', 'file.xslt'],
     yacc: ['file.yy', 'file.yxx', 'file.y++'],
-    yaml: ['file.yaml', 'file.yml', 'file.eyaml', 'any/.bundle/config', '.clangd', '.clang-format', '.clang-tidy', 'file.mplstyle', 'yarn.lock'],
+    yaml: ['file.yaml', 'file.yml', 'file.eyaml', 'any/.bundle/config', '.clangd', '.clang-format', '.clang-tidy', 'file.mplstyle', 'matplotlibrc', 'yarn.lock'],
     yang: ['file.yang'],
     yuck: ['file.yuck'],
     z8a: ['file.z8a'],
@@ -1671,14 +1688,14 @@ func Test_mod_file()
   call assert_equal('pim', b:modula2.dialect)
   bwipe!
 
-  " Modula-2 program MODULE with priorty (and uppercase extension)
+  " Modula-2 program MODULE with priority (and uppercase extension)
   call writefile(['MODULE Module2Mod [42];'], 'Xfile.MOD')
   split Xfile.MOD
   call assert_equal('modula2', &filetype)
   call assert_equal('pim', b:modula2.dialect)
   bwipe!
 
-  " Modula-2 implementation MODULE with priorty (and uppercase extension)
+  " Modula-2 implementation MODULE with priority (and uppercase extension)
   call writefile(['IMPLEMENTATION MODULE Module2Mod [42];'], 'Xfile.MOD')
   split Xfile.MOD
   call assert_equal('modula2', &filetype)
@@ -2424,6 +2441,28 @@ func Test_def_file()
   split Xfile.def
   call assert_equal('modula2', &filetype)
   call assert_equal('pim', b:modula2.dialect)
+  bwipe!
+
+  filetype off
+endfunc
+
+func Test_uci_file()
+  filetype on
+
+  call mkdir('any/etc/config', 'pR')
+  call writefile(['config firewall'], 'any/etc/config/firewall', 'D')
+  split any/etc/config/firewall
+  call assert_equal('uci', &filetype)
+  bwipe!
+
+  call writefile(['# config for nginx here'], 'any/etc/config/firewall', 'D')
+  split any/etc/config/firewall
+  call assert_notequal('uci', &filetype)
+  bwipe!
+
+  call writefile(['# Copyright Cool Cats 1997', 'config firewall'], 'any/etc/config/firewall', 'D')
+  split any/etc/config/firewall
+  call assert_equal('uci', &filetype)
   bwipe!
 
   filetype off
