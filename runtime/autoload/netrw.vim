@@ -10,6 +10,9 @@
 "   2024 Feb 29 by Vim Project: handle symlinks in tree mode correctly
 "   2024 Apr 03 by Vim Project: detect filetypes for remote edited files
 "   2024 May 08 by Vim Project: cleanup legacy Win9X checks
+"   2024 May 09 by Vim Project: remove hard-coded private.ppk
+"   2024 May 10 by Vim Project: recursively delete directories by default
+"   2024 May 13 by Vim Project: prefer scp over pscp
 " Former Maintainer:	Charles E Campbell
 " GetLatestVimScripts: 1075 1 :AutoInstall: netrw.vim
 " Copyright:    Copyright (C) 2016 Charles E. Campbell {{{1
@@ -284,16 +287,11 @@ if !exists("g:netrw_scp_cmd")
  if executable("scp")
   call s:NetrwInit("g:netrw_scp_cmd" , "scp -q")
  elseif executable("pscp")
-  if has("win32") && filereadable('c:\private.ppk')
-   call s:NetrwInit("g:netrw_scp_cmd", 'pscp -i c:\private.ppk')
-  else
-   call s:NetrwInit("g:netrw_scp_cmd", 'pscp -q')
-  endif
+  call s:NetrwInit("g:netrw_scp_cmd", 'pscp -q')
  else
   call s:NetrwInit("g:netrw_scp_cmd" , "scp -q")
  endif
 endif
-
 call s:NetrwInit("g:netrw_sftp_cmd" , "sftp")
 call s:NetrwInit("g:netrw_ssh_cmd"  , "ssh")
 
@@ -369,10 +367,6 @@ endif
 call s:NetrwInit("g:netrw_keepdir",1)
 if !exists("g:netrw_list_cmd")
  if g:netrw_scp_cmd =~ '^pscp' && executable("pscp")
-  if has("win32") && filereadable("c:\\private.ppk")
-   " provide a pscp-based listing command
-   let g:netrw_scp_cmd ="pscp -i C:\\private.ppk"
-  endif
   if exists("g:netrw_list_cmd_options")
    let g:netrw_list_cmd= g:netrw_scp_cmd." -ls USEPORT HOSTNAME: ".g:netrw_list_cmd_options
   else
@@ -11465,7 +11459,7 @@ fun! s:NetrwLocalRmFile(path,fname,all)
    if !all
     echohl Statement
     call inputsave()
-    let ok= input("Confirm deletion of directory<".rmfile."> ","[{y(es)},n(o),a(ll),q(uit)] ")
+    let ok= input("Confirm *recursive* deletion of directory<".rmfile."> ","[{y(es)},n(o),a(ll),q(uit)] ")
     call inputrestore()
     let ok= substitute(ok,'\[{y(es)},n(o),a(ll),q(uit)]\s*','','e')
     if ok == ""
@@ -11478,7 +11472,7 @@ fun! s:NetrwLocalRmFile(path,fname,all)
    let rmfile= substitute(rmfile,'[\/]$','','e')
 
    if all || ok =~# 'y\%[es]' || ok == ""
-    if delete(rmfile,"d")
+    if delete(rmfile,"rf")
      call netrw#ErrorMsg(s:ERROR,"unable to delete directory <".rmfile.">!",103)
     endif
    endif
