@@ -22,13 +22,6 @@
 
 #define NAMESPACE_CHAR	(char_u *)"abglstvw"
 
-/*
- * When recursively copying lists and dicts we need to remember which ones we
- * have done to avoid endless recursiveness.  This unique ID is used for that.
- * The last bit is used for previous_funccal, ignored when comparing.
- */
-static int current_copyID = 0;
-
 static int eval2(char_u **arg, typval_T *rettv, evalarg_T *evalarg);
 static int eval3(char_u **arg, typval_T *rettv, evalarg_T *evalarg);
 static int eval4(char_u **arg, typval_T *rettv, evalarg_T *evalarg);
@@ -39,7 +32,6 @@ static int eval8(char_u **arg, typval_T *rettv, evalarg_T *evalarg, int want_str
 static int eval9(char_u **arg, typval_T *rettv, evalarg_T *evalarg, int want_string);
 static int eval9_leader(typval_T *rettv, int numeric_only, char_u *start_leader, char_u **end_leaderp);
 
-static int free_unref_items(int copyID);
 static char_u *make_expanded_name(char_u *in_start, char_u *expr_start, char_u *expr_end, char_u *in_end);
 
 /*
@@ -2281,8 +2273,15 @@ tv_op_blob(typval_T *tv1, typval_T *tv2, char_u *op)
 	return FAIL;
 
     // Blob += Blob
-    if (tv1->vval.v_blob == NULL || tv2->vval.v_blob == NULL)
+    if (tv2->vval.v_blob == NULL)
 	return OK;
+
+    if (tv1->vval.v_blob == NULL)
+    {
+	tv1->vval.v_blob = tv2->vval.v_blob;
+	++tv1->vval.v_blob->bv_refcount;
+	return OK;
+    }
 
     blob_T	*b1 = tv1->vval.v_blob;
     blob_T	*b2 = tv2->vval.v_blob;
@@ -2455,12 +2454,6 @@ tv_op(typval_T *tv1, typval_T *tv2, char_u *op)
 	return FAIL;
     }
 
-    if (tv2->v_type == VAR_CLASS || tv2->v_type == VAR_TYPEALIAS)
-    {
-	check_typval_is_value(tv2);
-	return FAIL;
-    }
-
     int retval = FAIL;
     switch (tv1->v_type)
     {
@@ -2476,12 +2469,9 @@ tv_op(typval_T *tv1, typval_T *tv2, char_u *op)
 	case VAR_CHANNEL:
 	case VAR_INSTR:
 	case VAR_OBJECT:
-	    break;
-
 	case VAR_CLASS:
 	case VAR_TYPEALIAS:
-	    check_typval_is_value(tv1);
-	    return FAIL;
+	    break;
 
 	case VAR_BLOB:
 	    retval = tv_op_blob(tv1, tv2, op);
@@ -2981,7 +2971,7 @@ newline_skip_comments(char_u *arg)
 	    char_u *nl = vim_strchr(p, NL);
 
 	    if (nl == NULL)
-		    break;
+		break;
 	    p = nl;
 	}
 	if (*p != NL)
@@ -4511,18 +4501,21 @@ handle_predefined(char_u *s, int len, typval_T *rettv)
 	case 9:
 		if (STRNCMP(s, "null_", 5) != 0)
 		    break;
+		// null_list
 		if (STRNCMP(s + 5, "list", 4) == 0)
 		{
 		    rettv->v_type = VAR_LIST;
 		    rettv->vval.v_list = NULL;
 		    return OK;
 		}
+		// null_dict
 		if (STRNCMP(s + 5, "dict", 4) == 0)
 		{
 		    rettv->v_type = VAR_DICT;
 		    rettv->vval.v_dict = NULL;
 		    return OK;
 		}
+		// null_blob
 		if (STRNCMP(s + 5, "blob", 4) == 0)
 		{
 		    rettv->v_type = VAR_BLOB;
@@ -5162,7 +5155,7 @@ eval_method(
 	{
 	    *arg = name;
 
-	    // Truncate the name a the "(".  Avoid trying to get another line
+	    // Truncate the name at the "(".  Avoid trying to get another line
 	    // by making "getline" NULL.
 	    *paren = NUL;
 	    char_u	*(*getline)(int, void *, int, getline_opt_T) = NULL;
@@ -5216,6 +5209,9 @@ eval_method(
     if (evaluate)
 	clear_tv(&base);
     vim_free(tofree);
+
+    if (alias != NULL)
+	vim_free(alias);
 
     return ret;
 }
@@ -5417,30 +5413,6 @@ check_can_index(typval_T *rettv, int evaluate, int verbose)
 	    break;
     }
     return OK;
-}
-
-/*
- * slice() function
- */
-    void
-f_slice(typval_T *argvars, typval_T *rettv)
-{
-    if (in_vim9script()
-	    && ((argvars[0].v_type != VAR_STRING
-		    && argvars[0].v_type != VAR_LIST
-		    && argvars[0].v_type != VAR_BLOB
-		    && check_for_list_arg(argvars, 0) == FAIL)
-		|| check_for_number_arg(argvars, 1) == FAIL
-		|| check_for_opt_number_arg(argvars, 2) == FAIL))
-	return;
-
-    if (check_can_index(argvars, TRUE, FALSE) != OK)
-	return;
-
-    copy_tv(argvars, rettv);
-    eval_index_inner(rettv, TRUE, argvars + 1,
-	    argvars[2].v_type == VAR_UNKNOWN ? NULL : argvars + 2,
-	    TRUE, NULL, 0, FALSE);
 }
 
 /*
@@ -5693,763 +5665,295 @@ partial_unref(partial_T *pt)
 }
 
 /*
- * Return the next (unique) copy ID.
- * Used for serializing nested structures.
+ * Return a textual representation of a string in "tv".
+ * If the memory is allocated "tofree" is set to it, otherwise NULL.
+ * When both "echo_style" and "composite_val" are FALSE, put quotes around
+ * strings as "string()", otherwise does not put quotes around strings.
+ * May return NULL.
  */
-    int
-get_copyID(void)
+    static char_u *
+string_tv2string(
+    typval_T	*tv,
+    char_u	**tofree,
+    int		echo_style,
+    int		composite_val)
 {
-    current_copyID += COPYID_INC;
-    return current_copyID;
+    char_u	*r = NULL;
+
+    if (echo_style && !composite_val)
+    {
+	*tofree = NULL;
+	r = tv->vval.v_string;
+	if (r == NULL)
+	    r = (char_u *)"";
+    }
+    else
+    {
+	*tofree = string_quote(tv->vval.v_string, FALSE);
+	r = *tofree;
+    }
+
+    return r;
 }
 
 /*
- * Garbage collection for lists and dictionaries.
- *
- * We use reference counts to be able to free most items right away when they
- * are no longer used.  But for composite items it's possible that it becomes
- * unused while the reference count is > 0: When there is a recursive
- * reference.  Example:
- *	:let l = [1, 2, 3]
- *	:let d = {9: l}
- *	:let l[1] = d
- *
- * Since this is quite unusual we handle this with garbage collection: every
- * once in a while find out which lists and dicts are not referenced from any
- * variable.
- *
- * Here is a good reference text about garbage collection (refers to Python
- * but it applies to all reference-counting mechanisms):
- *	http://python.ca/nas/python/gc/
+ * Return a textual representation of a function in "tv".
+ * If the memory is allocated "tofree" is set to it, otherwise NULL.
+ * When "echo_style" is FALSE, put quotes around the function name as
+ * "function()", otherwise does not put quotes around function name.
+ * May return NULL.
  */
-
-/*
- * Do garbage collection for lists and dicts.
- * When "testing" is TRUE this is called from test_garbagecollect_now().
- * Return TRUE if some memory was freed.
- */
-    int
-garbage_collect(int testing)
+    static char_u *
+func_tv2string(typval_T *tv, char_u **tofree, int echo_style)
 {
-    int		copyID;
-    int		abort = FALSE;
-    buf_T	*buf;
-    win_T	*wp;
-    int		did_free = FALSE;
-    tabpage_T	*tp;
+    char_u	*r = NULL;
+    char_u	buf[MAX_FUNC_NAME_LEN];
 
-    if (!testing)
+    if (echo_style)
     {
-	// Only do this once.
-	want_garbage_collect = FALSE;
-	may_garbage_collect = FALSE;
-	garbage_collect_at_exit = FALSE;
-    }
-
-    // The execution stack can grow big, limit the size.
-    if (exestack.ga_maxlen - exestack.ga_len > 500)
-    {
-	size_t	new_len;
-	char_u	*pp;
-	int	n;
-
-	// Keep 150% of the current size, with a minimum of the growth size.
-	n = exestack.ga_len / 2;
-	if (n < exestack.ga_growsize)
-	    n = exestack.ga_growsize;
-
-	// Don't make it bigger though.
-	if (exestack.ga_len + n < exestack.ga_maxlen)
+	r = tv->vval.v_string == NULL ? (char_u *)"function()"
+				: make_ufunc_name_readable(tv->vval.v_string,
+						buf, MAX_FUNC_NAME_LEN);
+	if (r == buf && tv->vval.v_string != NULL)
 	{
-	    new_len = (size_t)exestack.ga_itemsize * (exestack.ga_len + n);
-	    pp = vim_realloc(exestack.ga_data, new_len);
-	    if (pp == NULL)
-		return FAIL;
-	    exestack.ga_maxlen = exestack.ga_len + n;
-	    exestack.ga_data = pp;
+	    r = vim_strsave(buf);
+	    *tofree = r;
 	}
+	else
+	    *tofree = NULL;
     }
-
-    // We advance by two because we add one for items referenced through
-    // previous_funccal.
-    copyID = get_copyID();
-
-    /*
-     * 1. Go through all accessible variables and mark all lists and dicts
-     *    with copyID.
-     */
-
-    // Don't free variables in the previous_funccal list unless they are only
-    // referenced through previous_funccal.  This must be first, because if
-    // the item is referenced elsewhere the funccal must not be freed.
-    abort = abort || set_ref_in_previous_funccal(copyID);
-
-    // script-local variables
-    abort = abort || garbage_collect_scriptvars(copyID);
-
-    // buffer-local variables
-    FOR_ALL_BUFFERS(buf)
-	abort = abort || set_ref_in_item(&buf->b_bufvar.di_tv, copyID,
-								  NULL, NULL);
-
-    // window-local variables
-    FOR_ALL_TAB_WINDOWS(tp, wp)
-	abort = abort || set_ref_in_item(&wp->w_winvar.di_tv, copyID,
-								  NULL, NULL);
-    // window-local variables in autocmd windows
-    for (int i = 0; i < AUCMD_WIN_COUNT; ++i)
-	if (aucmd_win[i].auc_win != NULL)
-	    abort = abort || set_ref_in_item(
-		    &aucmd_win[i].auc_win->w_winvar.di_tv, copyID, NULL, NULL);
-#ifdef FEAT_PROP_POPUP
-    FOR_ALL_POPUPWINS(wp)
-	abort = abort || set_ref_in_item(&wp->w_winvar.di_tv, copyID,
-								  NULL, NULL);
-    FOR_ALL_TABPAGES(tp)
-	FOR_ALL_POPUPWINS_IN_TAB(tp, wp)
-		abort = abort || set_ref_in_item(&wp->w_winvar.di_tv, copyID,
-								  NULL, NULL);
-#endif
-
-    // tabpage-local variables
-    FOR_ALL_TABPAGES(tp)
-	abort = abort || set_ref_in_item(&tp->tp_winvar.di_tv, copyID,
-								  NULL, NULL);
-    // global variables
-    abort = abort || garbage_collect_globvars(copyID);
-
-    // function-local variables
-    abort = abort || set_ref_in_call_stack(copyID);
-
-    // named functions (matters for closures)
-    abort = abort || set_ref_in_functions(copyID);
-
-    // function call arguments, if v:testing is set.
-    abort = abort || set_ref_in_func_args(copyID);
-
-    // funcstacks keep variables for closures
-    abort = abort || set_ref_in_funcstacks(copyID);
-
-    // loopvars keep variables for loop blocks
-    abort = abort || set_ref_in_loopvars(copyID);
-
-    // v: vars
-    abort = abort || garbage_collect_vimvars(copyID);
-
-    // callbacks in buffers
-    abort = abort || set_ref_in_buffers(copyID);
-
-    // 'completefunc', 'omnifunc' and 'thesaurusfunc' callbacks
-    abort = abort || set_ref_in_insexpand_funcs(copyID);
-
-    // 'operatorfunc' callback
-    abort = abort || set_ref_in_opfunc(copyID);
-
-    // 'tagfunc' callback
-    abort = abort || set_ref_in_tagfunc(copyID);
-
-    // 'imactivatefunc' and 'imstatusfunc' callbacks
-    abort = abort || set_ref_in_im_funcs(copyID);
-
-#ifdef FEAT_LUA
-    abort = abort || set_ref_in_lua(copyID);
-#endif
-
-#ifdef FEAT_PYTHON
-    abort = abort || set_ref_in_python(copyID);
-#endif
-
-#ifdef FEAT_PYTHON3
-    abort = abort || set_ref_in_python3(copyID);
-#endif
-
-#ifdef FEAT_JOB_CHANNEL
-    abort = abort || set_ref_in_channel(copyID);
-    abort = abort || set_ref_in_job(copyID);
-#endif
-#ifdef FEAT_NETBEANS_INTG
-    abort = abort || set_ref_in_nb_channel(copyID);
-#endif
-
-#ifdef FEAT_TIMERS
-    abort = abort || set_ref_in_timer(copyID);
-#endif
-
-#ifdef FEAT_QUICKFIX
-    abort = abort || set_ref_in_quickfix(copyID);
-#endif
-
-#ifdef FEAT_TERMINAL
-    abort = abort || set_ref_in_term(copyID);
-#endif
-
-#ifdef FEAT_PROP_POPUP
-    abort = abort || set_ref_in_popups(copyID);
-#endif
-
-    abort = abort || set_ref_in_classes(copyID);
-
-    if (!abort)
+    else
     {
-	/*
-	 * 2. Free lists and dictionaries that are not referenced.
-	 */
-	did_free = free_unref_items(copyID);
-
-	/*
-	 * 3. Check if any funccal can be freed now.
-	 *    This may call us back recursively.
-	 */
-	free_unref_funccal(copyID, testing);
-    }
-    else if (p_verbose > 0)
-    {
-	verb_msg(_("Not enough memory to set references, garbage collection aborted!"));
+	*tofree = string_quote(tv->vval.v_string == NULL ? NULL
+				: make_ufunc_name_readable(tv->vval.v_string,
+					buf, MAX_FUNC_NAME_LEN), TRUE);
+	r = *tofree;
     }
 
-    return did_free;
+    return r;
 }
 
 /*
- * Free lists, dictionaries, channels and jobs that are no longer referenced.
+ * Return a textual representation of a partial in "tv".
+ * If the memory is allocated "tofree" is set to it, otherwise NULL.
+ * "numbuf" is used for a number.  May return NULL.
  */
-    static int
-free_unref_items(int copyID)
+    static char_u *
+partial_tv2string(
+    typval_T	*tv,
+    char_u	**tofree,
+    char_u	*numbuf,
+    int		copyID)
 {
-    int		did_free = FALSE;
+    char_u	*r = NULL;
+    partial_T	*pt;
+    char_u	*fname;
+    garray_T	ga;
+    int		i;
+    char_u	*tf;
 
-    // Let all "free" functions know that we are here.  This means no
-    // dictionaries, lists, channels or jobs are to be freed, because we will
-    // do that here.
-    in_free_unref_items = TRUE;
+    pt = tv->vval.v_partial;
+    fname = string_quote(pt == NULL ? NULL : partial_name(pt), FALSE);
 
-    /*
-     * PASS 1: free the contents of the items.  We don't free the items
-     * themselves yet, so that it is possible to decrement refcount counters
-     */
-
-    // Go through the list of dicts and free items without this copyID.
-    did_free |= dict_free_nonref(copyID);
-
-    // Go through the list of lists and free items without this copyID.
-    did_free |= list_free_nonref(copyID);
-
-    // Go through the list of objects and free items without this copyID.
-    did_free |= object_free_nonref(copyID);
-
-    // Go through the list of classes and free items without this copyID.
-    did_free |= class_free_nonref(copyID);
-
-#ifdef FEAT_JOB_CHANNEL
-    // Go through the list of jobs and free items without the copyID. This
-    // must happen before doing channels, because jobs refer to channels, but
-    // the reference from the channel to the job isn't tracked.
-    did_free |= free_unused_jobs_contents(copyID, COPYID_MASK);
-
-    // Go through the list of channels and free items without the copyID.
-    did_free |= free_unused_channels_contents(copyID, COPYID_MASK);
-#endif
-
-    /*
-     * PASS 2: free the items themselves.
-     */
-    object_free_items(copyID);
-    dict_free_items(copyID);
-    list_free_items(copyID);
-
-#ifdef FEAT_JOB_CHANNEL
-    // Go through the list of jobs and free items without the copyID. This
-    // must happen before doing channels, because jobs refer to channels, but
-    // the reference from the channel to the job isn't tracked.
-    free_unused_jobs(copyID, COPYID_MASK);
-
-    // Go through the list of channels and free items without the copyID.
-    free_unused_channels(copyID, COPYID_MASK);
-#endif
-
-    in_free_unref_items = FALSE;
-
-    return did_free;
-}
-
-/*
- * Mark all lists and dicts referenced through hashtab "ht" with "copyID".
- * "list_stack" is used to add lists to be marked.  Can be NULL.
- *
- * Returns TRUE if setting references failed somehow.
- */
-    int
-set_ref_in_ht(hashtab_T *ht, int copyID, list_stack_T **list_stack)
-{
-    int		todo;
-    int		abort = FALSE;
-    hashitem_T	*hi;
-    hashtab_T	*cur_ht;
-    ht_stack_T	*ht_stack = NULL;
-    ht_stack_T	*tempitem;
-
-    cur_ht = ht;
-    for (;;)
+    ga_init2(&ga, 1, 100);
+    ga_concat(&ga, (char_u *)"function(");
+    if (fname != NULL)
     {
-	if (!abort)
+	// When using uf_name prepend "g:" for a global function.
+	if (pt != NULL && pt->pt_name == NULL && fname[0] == '\''
+						&& vim_isupper(fname[1]))
 	{
-	    // Mark each item in the hashtab.  If the item contains a hashtab
-	    // it is added to ht_stack, if it contains a list it is added to
-	    // list_stack.
-	    todo = (int)cur_ht->ht_used;
-	    FOR_ALL_HASHTAB_ITEMS(cur_ht, hi, todo)
-		if (!HASHITEM_EMPTY(hi))
-		{
-		    --todo;
-		    abort = abort || set_ref_in_item(&HI2DI(hi)->di_tv, copyID,
-						       &ht_stack, list_stack);
-		}
+	    ga_concat(&ga, (char_u *)"'g:");
+	    ga_concat(&ga, fname + 1);
 	}
-
-	if (ht_stack == NULL)
-	    break;
-
-	// take an item from the stack
-	cur_ht = ht_stack->ht;
-	tempitem = ht_stack;
-	ht_stack = ht_stack->prev;
-	free(tempitem);
+	else
+	    ga_concat(&ga, fname);
+	vim_free(fname);
     }
-
-    return abort;
-}
-
-#if defined(FEAT_LUA) || defined(FEAT_PYTHON) || defined(FEAT_PYTHON3) \
-							|| defined(PROTO)
-/*
- * Mark a dict and its items with "copyID".
- * Returns TRUE if setting references failed somehow.
- */
-    int
-set_ref_in_dict(dict_T *d, int copyID)
-{
-    if (d != NULL && d->dv_copyID != copyID)
+    if (pt != NULL && pt->pt_argc > 0)
     {
-	d->dv_copyID = copyID;
-	return set_ref_in_ht(&d->dv_hashtab, copyID, NULL);
+	ga_concat(&ga, (char_u *)", [");
+	for (i = 0; i < pt->pt_argc; ++i)
+	{
+	    if (i > 0)
+		ga_concat(&ga, (char_u *)", ");
+	    ga_concat(&ga, tv2string(&pt->pt_argv[i], &tf, numbuf, copyID));
+	    vim_free(tf);
+	}
+	ga_concat(&ga, (char_u *)"]");
     }
-    return FALSE;
-}
-#endif
-
-/*
- * Mark a list and its items with "copyID".
- * Returns TRUE if setting references failed somehow.
- */
-    int
-set_ref_in_list(list_T *ll, int copyID)
-{
-    if (ll != NULL && ll->lv_copyID != copyID)
-    {
-	ll->lv_copyID = copyID;
-	return set_ref_in_list_items(ll, copyID, NULL);
-    }
-    return FALSE;
-}
-
-/*
- * Mark all lists and dicts referenced through list "l" with "copyID".
- * "ht_stack" is used to add hashtabs to be marked.  Can be NULL.
- *
- * Returns TRUE if setting references failed somehow.
- */
-    int
-set_ref_in_list_items(list_T *l, int copyID, ht_stack_T **ht_stack)
-{
-    listitem_T	 *li;
-    int		 abort = FALSE;
-    list_T	 *cur_l;
-    list_stack_T *list_stack = NULL;
-    list_stack_T *tempitem;
-
-    cur_l = l;
-    for (;;)
-    {
-	if (!abort && cur_l->lv_first != &range_list_item)
-	    // Mark each item in the list.  If the item contains a hashtab
-	    // it is added to ht_stack, if it contains a list it is added to
-	    // list_stack.
-	    for (li = cur_l->lv_first; !abort && li != NULL; li = li->li_next)
-		abort = abort || set_ref_in_item(&li->li_tv, copyID,
-						       ht_stack, &list_stack);
-	if (list_stack == NULL)
-	    break;
-
-	// take an item from the stack
-	cur_l = list_stack->list;
-	tempitem = list_stack;
-	list_stack = list_stack->prev;
-	free(tempitem);
-    }
-
-    return abort;
-}
-
-/*
- * Mark the partial in callback 'cb' with "copyID".
- */
-    int
-set_ref_in_callback(callback_T *cb, int copyID)
-{
-    typval_T tv;
-
-    if (cb->cb_name == NULL || *cb->cb_name == NUL || cb->cb_partial == NULL)
-	return FALSE;
-
-    tv.v_type = VAR_PARTIAL;
-    tv.vval.v_partial = cb->cb_partial;
-    return set_ref_in_item(&tv, copyID, NULL, NULL);
-}
-
-/*
- * Mark the dict "dd" with "copyID".
- * Also see set_ref_in_item().
- */
-    static int
-set_ref_in_item_dict(
-    dict_T		*dd,
-    int			copyID,
-    ht_stack_T		**ht_stack,
-    list_stack_T	**list_stack)
-{
-    if (dd == NULL || dd->dv_copyID == copyID)
-	return FALSE;
-
-    // Didn't see this dict yet.
-    dd->dv_copyID = copyID;
-    if (ht_stack == NULL)
-	return set_ref_in_ht(&dd->dv_hashtab, copyID, list_stack);
-
-    ht_stack_T *newitem = ALLOC_ONE(ht_stack_T);
-    if (newitem == NULL)
-	return TRUE;
-
-    newitem->ht = &dd->dv_hashtab;
-    newitem->prev = *ht_stack;
-    *ht_stack = newitem;
-
-    return FALSE;
-}
-
-/*
- * Mark the list "ll" with "copyID".
- * Also see set_ref_in_item().
- */
-    static int
-set_ref_in_item_list(
-    list_T		*ll,
-    int			copyID,
-    ht_stack_T		**ht_stack,
-    list_stack_T	**list_stack)
-{
-    if (ll == NULL || ll->lv_copyID == copyID)
-	return FALSE;
-
-    // Didn't see this list yet.
-    ll->lv_copyID = copyID;
-    if (list_stack == NULL)
-	return set_ref_in_list_items(ll, copyID, ht_stack);
-
-    list_stack_T *newitem = ALLOC_ONE(list_stack_T);
-    if (newitem == NULL)
-	return TRUE;
-
-    newitem->list = ll;
-    newitem->prev = *list_stack;
-    *list_stack = newitem;
-
-    return FALSE;
-}
-
-/*
- * Mark the partial "pt" with "copyID".
- * Also see set_ref_in_item().
- */
-    static int
-set_ref_in_item_partial(
-    partial_T		*pt,
-    int			copyID,
-    ht_stack_T		**ht_stack,
-    list_stack_T	**list_stack)
-{
-    if (pt == NULL || pt->pt_copyID == copyID)
-	return FALSE;
-
-    // Didn't see this partial yet.
-    pt->pt_copyID = copyID;
-
-    int abort = set_ref_in_func(pt->pt_name, pt->pt_func, copyID);
-
-    if (pt->pt_dict != NULL)
+    if (pt != NULL && pt->pt_dict != NULL)
     {
 	typval_T dtv;
 
+	ga_concat(&ga, (char_u *)", ");
 	dtv.v_type = VAR_DICT;
 	dtv.vval.v_dict = pt->pt_dict;
-	set_ref_in_item(&dtv, copyID, ht_stack, list_stack);
+	ga_concat(&ga, tv2string(&dtv, &tf, numbuf, copyID));
+	vim_free(tf);
     }
+    // terminate with ')' and a NUL
+    ga_concat_len(&ga, (char_u *)")", 2);
 
-    if (pt->pt_obj != NULL)
-    {
-	typval_T objtv;
+    *tofree = ga.ga_data;
+    r = *tofree;
 
-	objtv.v_type = VAR_OBJECT;
-	objtv.vval.v_object = pt->pt_obj;
-	set_ref_in_item(&objtv, copyID, ht_stack, list_stack);
-    }
-
-    for (int i = 0; i < pt->pt_argc; ++i)
-	abort = abort || set_ref_in_item(&pt->pt_argv[i], copyID,
-		ht_stack, list_stack);
-    // pt_funcstack is handled in set_ref_in_funcstacks()
-    // pt_loopvars is handled in set_ref_in_loopvars()
-
-    return abort;
+    return r;
 }
+
+/*
+ * Return a textual representation of a List in "tv".
+ * If the memory is allocated "tofree" is set to it, otherwise NULL.
+ * When "copyID" is not zero replace recursive lists with "...".  When
+ * "restore_copyID" is FALSE, repeated items in lists are replaced with "...".
+ * May return NULL.
+ */
+    static char_u *
+list_tv2string(
+    typval_T	*tv,
+    char_u	**tofree,
+    int		copyID,
+    int		restore_copyID)
+{
+    char_u	*r = NULL;
+
+    if (tv->vval.v_list == NULL)
+    {
+	// NULL list is equivalent to empty list.
+	*tofree = NULL;
+	r = (char_u *)"[]";
+    }
+    else if (copyID != 0 && tv->vval.v_list->lv_copyID == copyID
+	    && tv->vval.v_list->lv_len > 0)
+    {
+	*tofree = NULL;
+	r = (char_u *)"[...]";
+    }
+    else
+    {
+	int old_copyID;
+	if (restore_copyID)
+	    old_copyID = tv->vval.v_list->lv_copyID;
+
+	tv->vval.v_list->lv_copyID = copyID;
+	*tofree = list2string(tv, copyID, restore_copyID);
+	if (restore_copyID)
+	    tv->vval.v_list->lv_copyID = old_copyID;
+	r = *tofree;
+    }
+
+    return r;
+}
+
+/*
+ * Return a textual representation of a Dict in "tv".
+ * If the memory is allocated "tofree" is set to it, otherwise NULL.
+ * When "copyID" is not zero replace recursive dicts with "...".
+ * When "restore_copyID" is FALSE, repeated items in the dictionary are
+ * replaced with "...".  May return NULL.
+ */
+    static char_u *
+dict_tv2string(
+    typval_T	*tv,
+    char_u	**tofree,
+    int		copyID,
+    int		restore_copyID)
+{
+    char_u	*r = NULL;
+
+    if (tv->vval.v_dict == NULL)
+    {
+	// NULL dict is equivalent to empty dict.
+	*tofree = NULL;
+	r = (char_u *)"{}";
+    }
+    else if (copyID != 0 && tv->vval.v_dict->dv_copyID == copyID
+	    && tv->vval.v_dict->dv_hashtab.ht_used != 0)
+    {
+	*tofree = NULL;
+	r = (char_u *)"{...}";
+    }
+    else
+    {
+	int old_copyID;
+	if (restore_copyID)
+	    old_copyID = tv->vval.v_dict->dv_copyID;
+
+	tv->vval.v_dict->dv_copyID = copyID;
+	*tofree = dict2string(tv, copyID, restore_copyID);
+	if (restore_copyID)
+	    tv->vval.v_dict->dv_copyID = old_copyID;
+	r = *tofree;
+    }
+
+    return r;
+}
+
+/*
+ * Return a textual representation of a job or a channel in "tv".
+ * If the memory is allocated "tofree" is set to it, otherwise NULL.
+ * "numbuf" is used for a number.
+ * When "composite_val" is FALSE, put quotes around strings as "string()",
+ * otherwise does not put quotes around strings.
+ * May return NULL.
+ */
+    static char_u *
+jobchan_tv2string(
+    typval_T	*tv,
+    char_u	**tofree,
+    char_u	*numbuf,
+    int		composite_val)
+{
+    char_u	*r = NULL;
 
 #ifdef FEAT_JOB_CHANNEL
-/*
- * Mark the job "pt" with "copyID".
- * Also see set_ref_in_item().
- */
-    static int
-set_ref_in_item_job(
-    job_T		*job,
-    int			copyID,
-    ht_stack_T		**ht_stack,
-    list_stack_T	**list_stack)
-{
-    typval_T    dtv;
+    *tofree = NULL;
 
-    if (job == NULL || job->jv_copyID == copyID)
-	return FALSE;
+    if (tv->v_type == VAR_JOB)
+	r = job_to_string_buf(tv, numbuf);
+    else
+	r = channel_to_string_buf(tv, numbuf);
 
-    job->jv_copyID = copyID;
-    if (job->jv_channel != NULL)
+    if (composite_val)
     {
-	dtv.v_type = VAR_CHANNEL;
-	dtv.vval.v_channel = job->jv_channel;
-	set_ref_in_item(&dtv, copyID, ht_stack, list_stack);
+	*tofree = string_quote(r, FALSE);
+	r = *tofree;
     }
-    if (job->jv_exit_cb.cb_partial != NULL)
-    {
-	dtv.v_type = VAR_PARTIAL;
-	dtv.vval.v_partial = job->jv_exit_cb.cb_partial;
-	set_ref_in_item(&dtv, copyID, ht_stack, list_stack);
-    }
-
-    return FALSE;
-}
-
-/*
- * Mark the channel "ch" with "copyID".
- * Also see set_ref_in_item().
- */
-    static int
-set_ref_in_item_channel(
-    channel_T		*ch,
-    int			copyID,
-    ht_stack_T		**ht_stack,
-    list_stack_T	**list_stack)
-{
-    typval_T    dtv;
-
-    if (ch == NULL || ch->ch_copyID == copyID)
-	return FALSE;
-
-    ch->ch_copyID = copyID;
-    for (ch_part_T part = PART_SOCK; part < PART_COUNT; ++part)
-    {
-	for (jsonq_T *jq = ch->ch_part[part].ch_json_head.jq_next;
-		jq != NULL; jq = jq->jq_next)
-	    set_ref_in_item(jq->jq_value, copyID, ht_stack, list_stack);
-	for (cbq_T *cq = ch->ch_part[part].ch_cb_head.cq_next; cq != NULL;
-		cq = cq->cq_next)
-	    if (cq->cq_callback.cb_partial != NULL)
-	    {
-		dtv.v_type = VAR_PARTIAL;
-		dtv.vval.v_partial = cq->cq_callback.cb_partial;
-		set_ref_in_item(&dtv, copyID, ht_stack, list_stack);
-	    }
-	if (ch->ch_part[part].ch_callback.cb_partial != NULL)
-	{
-	    dtv.v_type = VAR_PARTIAL;
-	    dtv.vval.v_partial = ch->ch_part[part].ch_callback.cb_partial;
-	    set_ref_in_item(&dtv, copyID, ht_stack, list_stack);
-	}
-    }
-    if (ch->ch_callback.cb_partial != NULL)
-    {
-	dtv.v_type = VAR_PARTIAL;
-	dtv.vval.v_partial = ch->ch_callback.cb_partial;
-	set_ref_in_item(&dtv, copyID, ht_stack, list_stack);
-    }
-    if (ch->ch_close_cb.cb_partial != NULL)
-    {
-	dtv.v_type = VAR_PARTIAL;
-	dtv.vval.v_partial = ch->ch_close_cb.cb_partial;
-	set_ref_in_item(&dtv, copyID, ht_stack, list_stack);
-    }
-
-    return FALSE;
-}
 #endif
 
-/*
- * Mark the class "cl" with "copyID".
- * Also see set_ref_in_item().
- */
-    int
-set_ref_in_item_class(
-    class_T		*cl,
-    int			copyID,
-    ht_stack_T		**ht_stack,
-    list_stack_T	**list_stack)
-{
-    int abort = FALSE;
-
-    if (cl == NULL || cl->class_copyID == copyID)
-	return FALSE;
-
-    cl->class_copyID = copyID;
-    if (cl->class_members_tv != NULL)
-    {
-	// The "class_members_tv" table is allocated only for regular classes
-	// and not for interfaces.
-	for (int i = 0; !abort && i < cl->class_class_member_count; ++i)
-	    abort = abort || set_ref_in_item(
-		    &cl->class_members_tv[i],
-		    copyID, ht_stack, list_stack);
-    }
-
-    for (int i = 0; !abort && i < cl->class_class_function_count; ++i)
-	abort = abort || set_ref_in_func(NULL,
-		cl->class_class_functions[i], copyID);
-
-    for (int i = 0; !abort && i < cl->class_obj_method_count; ++i)
-	abort = abort || set_ref_in_func(NULL,
-		cl->class_obj_methods[i], copyID);
-
-    return abort;
+    return r;
 }
 
 /*
- * Mark the object "cl" with "copyID".
- * Also see set_ref_in_item().
+ * Return a textual representation of a class in "tv".
+ * If the memory is allocated "tofree" is set to it, otherwise NULL.
+ * May return NULL.
  */
-    static int
-set_ref_in_item_object(
-    object_T		*obj,
-    int			copyID,
-    ht_stack_T		**ht_stack,
-    list_stack_T	**list_stack)
+    static char_u *
+class_tv2string(typval_T *tv, char_u **tofree)
 {
-    int abort = FALSE;
+    char_u	*r = NULL;
+    class_T	*cl = tv->vval.v_class;
+    char	*s = "class";
 
-    if (obj == NULL || obj->obj_copyID == copyID)
-	return FALSE;
+    if (cl != NULL && IS_INTERFACE(cl))
+	s = "interface";
+    else if (cl != NULL && IS_ENUM(cl))
+	s = "enum";
+    size_t len = STRLEN(s) + 1 +
+				(cl == NULL ? 9 : STRLEN(cl->class_name)) + 1;
+    r = *tofree = alloc(len);
+    vim_snprintf((char *)r, len, "%s %s", s,
+			cl == NULL ? "[unknown]" : (char *)cl->class_name);
 
-    obj->obj_copyID = copyID;
-
-    // The typval_T array is right after the object_T.
-    typval_T *mtv = (typval_T *)(obj + 1);
-    for (int i = 0; !abort
-	    && i < obj->obj_class->class_obj_member_count; ++i)
-	abort = abort || set_ref_in_item(mtv + i, copyID,
-		ht_stack, list_stack);
-
-    return abort;
-}
-
-/*
- * Mark all lists, dicts and other container types referenced through typval
- * "tv" with "copyID".
- * "list_stack" is used to add lists to be marked.  Can be NULL.
- * "ht_stack" is used to add hashtabs to be marked.  Can be NULL.
- *
- * Returns TRUE if setting references failed somehow.
- */
-    int
-set_ref_in_item(
-    typval_T	    *tv,
-    int		    copyID,
-    ht_stack_T	    **ht_stack,
-    list_stack_T    **list_stack)
-{
-    int		abort = FALSE;
-
-    switch (tv->v_type)
-    {
-	case VAR_DICT:
-	    return set_ref_in_item_dict(tv->vval.v_dict, copyID,
-							 ht_stack, list_stack);
-
-	case VAR_LIST:
-	    return set_ref_in_item_list(tv->vval.v_list, copyID,
-							 ht_stack, list_stack);
-
-	case VAR_FUNC:
-	{
-	    abort = set_ref_in_func(tv->vval.v_string, NULL, copyID);
-	    break;
-	}
-
-	case VAR_PARTIAL:
-	    return set_ref_in_item_partial(tv->vval.v_partial, copyID,
-							ht_stack, list_stack);
-
-	case VAR_JOB:
-#ifdef FEAT_JOB_CHANNEL
-	    return set_ref_in_item_job(tv->vval.v_job, copyID,
-							 ht_stack, list_stack);
-#else
-	    break;
-#endif
-
-	case VAR_CHANNEL:
-#ifdef FEAT_JOB_CHANNEL
-	    return set_ref_in_item_channel(tv->vval.v_channel, copyID,
-							 ht_stack, list_stack);
-#else
-	    break;
-#endif
-
-	case VAR_CLASS:
-	    return set_ref_in_item_class(tv->vval.v_class, copyID,
-							 ht_stack, list_stack);
-
-	case VAR_OBJECT:
-	    return set_ref_in_item_object(tv->vval.v_object, copyID,
-							 ht_stack, list_stack);
-
-	case VAR_UNKNOWN:
-	case VAR_ANY:
-	case VAR_VOID:
-	case VAR_BOOL:
-	case VAR_SPECIAL:
-	case VAR_NUMBER:
-	case VAR_FLOAT:
-	case VAR_STRING:
-	case VAR_BLOB:
-	case VAR_TYPEALIAS:
-	case VAR_INSTR:
-	    // Types that do not contain any other item
-	    break;
-    }
-
-    return abort;
+    return r;
 }
 
 /*
  * Return a string with the string representation of a variable.
  * If the memory is allocated "tofree" is set to it, otherwise NULL.
  * "numbuf" is used for a number.
- * When "copyID" is not NULL replace recursive lists and dicts with "...".
+ * When "copyID" is not zero replace recursive lists and dicts with "...".
  * When both "echo_style" and "composite_val" are FALSE, put quotes around
  * strings as "string()", otherwise does not put quotes around strings, as
  * ":echo" displays values.
@@ -6488,155 +5992,27 @@ echo_string_core(
     switch (tv->v_type)
     {
 	case VAR_STRING:
-	    if (echo_style && !composite_val)
-	    {
-		*tofree = NULL;
-		r = tv->vval.v_string;
-		if (r == NULL)
-		    r = (char_u *)"";
-	    }
-	    else
-	    {
-		*tofree = string_quote(tv->vval.v_string, FALSE);
-		r = *tofree;
-	    }
+	    r = string_tv2string(tv, tofree, echo_style, composite_val);
 	    break;
 
 	case VAR_FUNC:
-	    {
-		char_u buf[MAX_FUNC_NAME_LEN];
-
-		if (echo_style)
-		{
-		    r = tv->vval.v_string == NULL ? (char_u *)"function()"
-				  : make_ufunc_name_readable(tv->vval.v_string,
-						       buf, MAX_FUNC_NAME_LEN);
-		    if (r == buf)
-		    {
-			r = vim_strsave(buf);
-			*tofree = r;
-		    }
-		    else
-			*tofree = NULL;
-		}
-		else
-		{
-		    *tofree = string_quote(tv->vval.v_string == NULL ? NULL
-			    : make_ufunc_name_readable(
-				tv->vval.v_string, buf, MAX_FUNC_NAME_LEN),
-									 TRUE);
-		    r = *tofree;
-		}
-	    }
+	    r = func_tv2string(tv, tofree, echo_style);
 	    break;
 
 	case VAR_PARTIAL:
-	    {
-		partial_T   *pt = tv->vval.v_partial;
-		char_u	    *fname = string_quote(pt == NULL ? NULL
-						    : partial_name(pt), FALSE);
-		garray_T    ga;
-		int	    i;
-		char_u	    *tf;
-
-		ga_init2(&ga, 1, 100);
-		ga_concat(&ga, (char_u *)"function(");
-		if (fname != NULL)
-		{
-		    // When using uf_name prepend "g:" for a global function.
-		    if (pt != NULL && pt->pt_name == NULL && fname[0] == '\''
-						      && vim_isupper(fname[1]))
-		    {
-			ga_concat(&ga, (char_u *)"'g:");
-			ga_concat(&ga, fname + 1);
-		    }
-		    else
-			ga_concat(&ga, fname);
-		    vim_free(fname);
-		}
-		if (pt != NULL && pt->pt_argc > 0)
-		{
-		    ga_concat(&ga, (char_u *)", [");
-		    for (i = 0; i < pt->pt_argc; ++i)
-		    {
-			if (i > 0)
-			    ga_concat(&ga, (char_u *)", ");
-			ga_concat(&ga,
-			     tv2string(&pt->pt_argv[i], &tf, numbuf, copyID));
-			vim_free(tf);
-		    }
-		    ga_concat(&ga, (char_u *)"]");
-		}
-		if (pt != NULL && pt->pt_dict != NULL)
-		{
-		    typval_T dtv;
-
-		    ga_concat(&ga, (char_u *)", ");
-		    dtv.v_type = VAR_DICT;
-		    dtv.vval.v_dict = pt->pt_dict;
-		    ga_concat(&ga, tv2string(&dtv, &tf, numbuf, copyID));
-		    vim_free(tf);
-		}
-		// terminate with ')' and a NUL
-		ga_concat_len(&ga, (char_u *)")", 2);
-
-		*tofree = ga.ga_data;
-		r = *tofree;
-		break;
-	    }
+	    r = partial_tv2string(tv, tofree, numbuf, copyID);
+	    break;
 
 	case VAR_BLOB:
 	    r = blob2string(tv->vval.v_blob, tofree, numbuf);
 	    break;
 
 	case VAR_LIST:
-	    if (tv->vval.v_list == NULL)
-	    {
-		// NULL list is equivalent to empty list.
-		*tofree = NULL;
-		r = (char_u *)"[]";
-	    }
-	    else if (copyID != 0 && tv->vval.v_list->lv_copyID == copyID
-		    && tv->vval.v_list->lv_len > 0)
-	    {
-		*tofree = NULL;
-		r = (char_u *)"[...]";
-	    }
-	    else
-	    {
-		int old_copyID = tv->vval.v_list->lv_copyID;
-
-		tv->vval.v_list->lv_copyID = copyID;
-		*tofree = list2string(tv, copyID, restore_copyID);
-		if (restore_copyID)
-		    tv->vval.v_list->lv_copyID = old_copyID;
-		r = *tofree;
-	    }
+	    r = list_tv2string(tv, tofree, copyID, restore_copyID);
 	    break;
 
 	case VAR_DICT:
-	    if (tv->vval.v_dict == NULL)
-	    {
-		// NULL dict is equivalent to empty dict.
-		*tofree = NULL;
-		r = (char_u *)"{}";
-	    }
-	    else if (copyID != 0 && tv->vval.v_dict->dv_copyID == copyID
-		    && tv->vval.v_dict->dv_hashtab.ht_used != 0)
-	    {
-		*tofree = NULL;
-		r = (char_u *)"{...}";
-	    }
-	    else
-	    {
-		int old_copyID = tv->vval.v_dict->dv_copyID;
-
-		tv->vval.v_dict->dv_copyID = copyID;
-		*tofree = dict2string(tv, copyID, restore_copyID);
-		if (restore_copyID)
-		    tv->vval.v_dict->dv_copyID = old_copyID;
-		r = *tofree;
-	    }
+	    r = dict_tv2string(tv, tofree, copyID, restore_copyID);
 	    break;
 
 	case VAR_NUMBER:
@@ -6649,16 +6025,7 @@ echo_string_core(
 
 	case VAR_JOB:
 	case VAR_CHANNEL:
-#ifdef FEAT_JOB_CHANNEL
-	    *tofree = NULL;
-	    r = tv->v_type == VAR_JOB ? job_to_string_buf(tv, numbuf)
-					   : channel_to_string_buf(tv, numbuf);
-	    if (composite_val)
-	    {
-		*tofree = string_quote(r, FALSE);
-		r = *tofree;
-	    }
-#endif
+	    r = jobchan_tv2string(tv, tofree, numbuf, composite_val);
 	    break;
 
 	case VAR_INSTR:
@@ -6667,23 +6034,11 @@ echo_string_core(
 	    break;
 
 	case VAR_CLASS:
-	    {
-		class_T *cl = tv->vval.v_class;
-		char *s = "class";
-		if (cl != NULL && IS_INTERFACE(cl))
-		    s = "interface";
-		else if (cl != NULL && IS_ENUM(cl))
-		    s = "enum";
-		size_t len = STRLEN(s) + 1 +
-		    (cl == NULL ? 9 : STRLEN(cl->class_name)) + 1;
-		r = *tofree = alloc(len);
-		vim_snprintf((char *)r, len, "%s %s", s,
-			    cl == NULL ? "[unknown]" : (char *)cl->class_name);
-	    }
+	    r = class_tv2string(tv, tofree);
 	    break;
 
 	case VAR_OBJECT:
-	    *tofree = r = object_string(tv->vval.v_object, numbuf, copyID,
+	    *tofree = r = object2string(tv->vval.v_object, numbuf, copyID,
 					echo_style, restore_copyID,
 					composite_val);
 	    break;
@@ -6718,7 +6073,7 @@ echo_string_core(
  * If the memory is allocated "tofree" is set to it, otherwise NULL.
  * "numbuf" is used for a number.
  * Does not put quotes around strings, as ":echo" displays values.
- * When "copyID" is not NULL replace recursive lists and dicts with "...".
+ * When "copyID" is not zero replace recursive lists and dicts with "...".
  * May return NULL.
  */
     char_u *
