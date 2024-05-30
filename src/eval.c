@@ -1299,8 +1299,8 @@ typedef enum {
  */
     static int
 get_lval_dict_item(
-    char_u	*name,
     lval_T	*lp,
+    char_u	*name,
     char_u	*key,
     int		len,
     char_u	**key_end,
@@ -1317,10 +1317,7 @@ get_lval_dict_item(
 	// "[key]": get key from "var1"
 	key = tv_get_string_chk(var1);	// is number or string
 	if (key == NULL)
-	{
-	    clear_tv(var1);
 	    return GLV_FAIL;
-	}
     }
     lp->ll_list = NULL;
     lp->ll_object = NULL;
@@ -1331,10 +1328,7 @@ get_lval_dict_item(
     {
 	lp->ll_tv->vval.v_dict = dict_alloc();
 	if (lp->ll_tv->vval.v_dict == NULL)
-	{
-	    clear_tv(var1);
 	    return GLV_FAIL;
-	}
 	++lp->ll_tv->vval.v_dict->dv_refcount;
     }
     lp->ll_dict = lp->ll_tv->vval.v_dict;
@@ -1363,10 +1357,7 @@ get_lval_dict_item(
 	if (len != -1)
 	    key[len] = prevval;
 	if (wrong)
-	{
-	    clear_tv(var1);
 	    return GLV_FAIL;
-	}
     }
 
     if (lp->ll_valtype != NULL)
@@ -1380,7 +1371,6 @@ get_lval_dict_item(
 		|| &lp->ll_dict->dv_hashtab == get_funccal_args_ht())
 	{
 	    semsg(_(e_illegal_variable_name_str), name);
-	    clear_tv(var1);
 	    return GLV_FAIL;
 	}
 
@@ -1389,14 +1379,12 @@ get_lval_dict_item(
 	{
 	    if (!quiet)
 		semsg(_(e_key_not_present_in_dictionary_str), key);
-	    clear_tv(var1);
 	    return GLV_FAIL;
 	}
 	if (len == -1)
 	    lp->ll_newkey = vim_strsave(key);
 	else
 	    lp->ll_newkey = vim_strnsave(key, len);
-	clear_tv(var1);
 	if (lp->ll_newkey == NULL)
 	    p = NULL;
 
@@ -1407,12 +1395,8 @@ get_lval_dict_item(
     else if ((flags & GLV_READ_ONLY) == 0
 	    && (var_check_ro(lp->ll_di->di_flags, name, FALSE)
 		|| var_check_lock(lp->ll_di->di_flags, name, FALSE)))
-    {
-	clear_tv(var1);
 	return GLV_FAIL;
-    }
 
-    clear_tv(var1);
     lp->ll_tv = &lp->ll_di->di_tv;
 
     return GLV_OK;
@@ -1445,17 +1429,12 @@ get_lval_blob(
     else
 	// is number or string
 	lp->ll_n1 = (long)tv_get_number(var1);
-    clear_tv(var1);
 
     if (check_blob_index(bloblen, lp->ll_n1, quiet) == FAIL)
-    {
-	clear_tv(var2);
 	return FAIL;
-    }
     if (lp->ll_range && !lp->ll_empty2)
     {
 	lp->ll_n2 = (long)tv_get_number(var2);
-	clear_tv(var2);
 	if (check_blob_range(bloblen, lp->ll_n1, lp->ll_n2, quiet) == FAIL)
 	    return FAIL;
     }
@@ -1499,7 +1478,6 @@ get_lval_list(
     else
 	// is number or string
 	lp->ll_n1 = (long)tv_get_number(var1);
-    clear_tv(var1);
 
     lp->ll_dict = NULL;
     lp->ll_object = NULL;
@@ -1508,10 +1486,7 @@ get_lval_list(
     lp->ll_li = check_range_index_one(lp->ll_list, &lp->ll_n1,
 				(flags & GLV_ASSIGN_WITH_OP) == 0, quiet);
     if (lp->ll_li == NULL)
-    {
-	clear_tv(var2);
 	return FAIL;
-    }
 
     if (lp->ll_valtype != NULL && !lp->ll_range)
 	// use the type of the member
@@ -1527,7 +1502,6 @@ get_lval_list(
     {
 	lp->ll_n2 = (long)tv_get_number(var2);
 	// is number or string
-	clear_tv(var2);
 	if (check_range_index_two(lp->ll_list,
 			&lp->ll_n1, lp->ll_li, &lp->ll_n2, quiet) == FAIL)
 	    return FAIL;
@@ -1539,24 +1513,107 @@ get_lval_list(
 }
 
 /*
- * Get a Class or Object lval variable that can be assigned a value to:
- * "name", "name.key", "name.key[expr]" etc.
+ * Get a class or object lval method in class "cl".  The 'key' argument points
+ * to the method name and 'key_end' points to the character after 'key'.
+ * 'v_type' is VAR_CLASS or VAR_OBJECT.
  *
- * 'cl_exec' is the class that is executing, or NULL. 'v_type' is VAR_CLASS or
- * VAR_OBJECT.  'key' points to the member variable name and 'key_end' points
- * to the character after 'key'.  If 'quiet' is TRUE, then error messages
- * are not displayed for invalid indexes.
+ * The method index, method function pointer and method type are returned in
+ * "lp".
+ */
+    static void
+get_lval_oc_method(
+    lval_T	*lp,
+    class_T	*cl,
+    char_u	*key,
+    char_u	*key_end,
+    vartype_T	v_type)
+{
+    // Look for a method with this name.
+    // round 1: class functions (skipped for an object)
+    // round 2: object methods
+    for (int round = v_type == VAR_OBJECT ? 2 : 1; round <= 2; ++round)
+    {
+	int	m_idx;
+	ufunc_T	*fp;
+
+	fp = method_lookup(cl, round == 1 ? VAR_CLASS : VAR_OBJECT,
+						key, key_end - key, &m_idx);
+	lp->ll_oi = m_idx;
+	if (fp != NULL)
+	{
+	    lp->ll_ufunc = fp;
+	    lp->ll_valtype = fp->uf_func_type;
+	    break;
+	}
+    }
+}
+
+/*
+ * Get a class or object lval variable in class "cl".  The "key" argument
+ * points to the variable name and "key_end" points to the character after
+ * "key".  "v_type" is VAR_CLASS or VAR_OBJECT.  "cl_exec" is the class that is
+ * executing, or NULL.
+ *
+ * The variable index, typval and type are returned in "lp".  Returns FAIL if
+ * the variable is not writable.  Otherwise returns OK.
+ */
+    static int
+get_lval_oc_variable(
+    lval_T	*lp,
+    class_T	*cl,
+    char_u	*key,
+    char_u	*key_end,
+    vartype_T	v_type,
+    class_T	*cl_exec,
+    int		flags)
+{
+    int		m_idx;
+    ocmember_T	*om;
+
+    om = member_lookup(cl, v_type, key, key_end - key, &m_idx);
+    lp->ll_oi = m_idx;
+    if (om == NULL)
+	return OK;
+
+    // Check variable is accessible
+    if (get_lval_check_access(cl_exec, cl, om, key_end, flags) == FAIL)
+	return FAIL;
+
+    // When lhs is used to modify the variable, check it is not a read-only
+    // variable.
+    if ((flags & GLV_READ_ONLY) == 0 && (*key_end != '.' && *key_end != '[')
+	    && oc_var_check_ro(cl, om))
+	return FAIL;
+
+    lp->ll_valtype = om->ocm_type;
+
+    if (v_type == VAR_OBJECT)
+	lp->ll_tv = ((typval_T *)(lp->ll_tv->vval.v_object + 1)) + m_idx;
+    else
+	lp->ll_tv = &cl->class_members_tv[m_idx];
+
+    return OK;
+}
+
+/*
+ * Get a Class or Object lval variable or method that can be assigned a value
+ * to: "name", "name.key", "name.key[expr]" etc.
+ *
+ * The 'key' argument points to the member name and 'key_end' points to the
+ * character after 'key'.  'v_type' is VAR_CLASS or VAR_OBJECT.  'cl_exec' is
+ * the class that is executing, or NULL.  If 'quiet' is TRUE, then error
+ * messages are not displayed for invalid indexes.
  *
  * The Class or Object is returned in 'lp'.  Returns OK on success and FAIL on
  * failure.
  */
     static int
 get_lval_class_or_obj(
-    class_T	*cl_exec,
-    vartype_T	v_type,
     lval_T	*lp,
     char_u	*key,
     char_u	*key_end,
+    vartype_T	v_type,
+    class_T	*cl_exec,
     int		flags,
     int		quiet)
 {
@@ -1582,77 +1639,96 @@ get_lval_class_or_obj(
     }
     lp->ll_class = cl;
 
-    // TODO: what if class is NULL?
-    if (cl != NULL)
+    if (cl == NULL)
+	// TODO: what if class is NULL?
+	return OK;
+
+    lp->ll_valtype = NULL;
+
+    if (flags & GLV_PREFER_FUNC)
+	get_lval_oc_method(lp, cl, key, key_end, v_type);
+
+    // Look for object/class member variable
+    if (lp->ll_valtype == NULL)
     {
-	lp->ll_valtype = NULL;
-
-	if (flags & GLV_PREFER_FUNC)
-	{
-	    // First look for a function with this name.
-	    // round 1: class functions (skipped for an object)
-	    // round 2: object methods
-	    for (int round = v_type == VAR_OBJECT ? 2 : 1;
-		    round <= 2; ++round)
-	    {
-		int	m_idx;
-		ufunc_T	*fp;
-
-		fp = method_lookup(cl,
-			round == 1 ? VAR_CLASS : VAR_OBJECT,
-			key, key_end - key, &m_idx);
-		lp->ll_oi = m_idx;
-		if (fp != NULL)
-		{
-		    lp->ll_ufunc = fp;
-		    lp->ll_valtype = fp->uf_func_type;
-		    break;
-		}
-	    }
-	}
-
-	if (lp->ll_valtype == NULL)
-	{
-	    int		m_idx;
-	    ocmember_T	*om
-		= member_lookup(cl, v_type, key, key_end - key, &m_idx);
-	    lp->ll_oi = m_idx;
-	    if (om != NULL)
-	    {
-		if (get_lval_check_access(cl_exec, cl, om,
-			    key_end, flags) == FAIL)
-		    return FAIL;
-
-		// When lhs is used to modify the variable, check it is
-		// not a read-only variable.
-		if ((flags & GLV_READ_ONLY) == 0
-			&& (*key_end != '.' && *key_end != '[')
-			&& oc_var_check_ro(cl, om))
-		    return FAIL;
-
-		lp->ll_valtype = om->ocm_type;
-
-		if (v_type == VAR_OBJECT)
-		    lp->ll_tv = ((typval_T *)(
-				lp->ll_tv->vval.v_object + 1)) + m_idx;
-		else
-		    lp->ll_tv = &cl->class_members_tv[m_idx];
-	    }
-	}
-
-	if (lp->ll_valtype == NULL)
-	{
-	    member_not_found_msg(cl, v_type, key, key_end - key);
+	if (get_lval_oc_variable(lp, cl, key, key_end, v_type, cl_exec, flags)
+								== FAIL)
 	    return FAIL;
-	}
+    }
+
+    if (lp->ll_valtype == NULL)
+    {
+	member_not_found_msg(cl, v_type, key, key_end - key);
+	return FAIL;
     }
 
     return OK;
 }
 
 /*
+ * Check whether dot (".") is allowed after the variable "name" with type
+ * "v_type".  Only Dict, Class and Object types support a dot after the name.
+ * Returns TRUE if dot is allowed after the name.
+ */
+    static int
+dot_allowed_after_type(char_u *name, vartype_T v_type, int quiet)
+{
+    if (v_type != VAR_DICT && v_type != VAR_OBJECT && v_type != VAR_CLASS)
+    {
+	if (!quiet)
+	    semsg(_(e_dot_not_allowed_after_str_str),
+		    vartype_name(v_type), name);
+	return FALSE;
+    }
+
+    return TRUE;
+}
+
+/*
+ * Check whether left bracket ("[") is allowed after the variable "name" with
+ * type "v_type".  Only Dict, List and Blob types support a bracket after the
+ * variable name.  Returns TRUE if bracket is allowed after the name.
+ */
+    static int
+bracket_allowed_after_type(char_u *name, vartype_T v_type, int quiet)
+{
+    if (v_type == VAR_CLASS || v_type == VAR_OBJECT)
+    {
+	if (!quiet)
+	    semsg(_(e_index_not_allowed_after_str_str),
+		    vartype_name(v_type), name);
+	return FALSE;
+    }
+
+    return TRUE;
+}
+
+/*
+ * Check whether the variable "name" with type "v_type" can be followed by an
+ * index.  Only Dict, List, Blob, Object and Class types support indexing.
+ * Returns TRUE if indexing is allowed after the name.
+ */
+    static int
+index_allowed_after_type(char_u *name, vartype_T v_type, int quiet)
+{
+    if (v_type != VAR_LIST && v_type != VAR_DICT && v_type != VAR_BLOB &&
+	    v_type != VAR_OBJECT && v_type != VAR_CLASS)
+    {
+	if (!quiet)
+	    semsg(_(e_index_not_allowed_after_str_str),
+		    vartype_name(v_type), name);
+	return FALSE;
+    }
+
+    return TRUE;
+}
+
+/*
  * Get the lval of a list/dict/blob/object/class subitem starting at "p". Loop
  * until no more [idx] or .key is following.
+ *
+ * If "rettv" is not NULL it points to the value to be assigned.
+ * "unlet" is TRUE for ":unlet".
  *
  * Returns a pointer to the character after the subscript on success or NULL on
  * failure.
@@ -1676,6 +1752,7 @@ get_lval_subscript(
     typval_T	var1;
     typval_T	var2;
     int		empty1 = FALSE;
+    int		rc = FAIL;
 
     /*
      * Loop until no more [idx] or .key is following.
@@ -1687,26 +1764,14 @@ get_lval_subscript(
     {
 	vartype_T v_type = lp->ll_tv->v_type;
 
-	if (*p == '.' && v_type != VAR_DICT
-		&& v_type != VAR_OBJECT
-		&& v_type != VAR_CLASS)
-	{
-	    if (!quiet)
-		semsg(_(e_dot_not_allowed_after_str_str),
-			vartype_name(v_type), name);
-	    return NULL;
-	}
-	if (v_type != VAR_LIST
-		&& v_type != VAR_DICT
-		&& v_type != VAR_BLOB
-		&& v_type != VAR_OBJECT
-		&& v_type != VAR_CLASS)
-	{
-	    if (!quiet)
-		semsg(_(e_index_not_allowed_after_str_str),
-			vartype_name(v_type), name);
-	    return NULL;
-	}
+	if (*p == '.' && !dot_allowed_after_type(name, v_type, quiet))
+	    goto done;
+
+	if (*p == '[' && !bracket_allowed_after_type(name, v_type, quiet))
+	    goto done;
+
+	if (!index_allowed_after_type(name, v_type, quiet))
+	    goto done;
 
 	// A NULL list/blob works like an empty list/blob, allocate one now.
 	int r = OK;
@@ -1715,13 +1780,13 @@ get_lval_subscript(
 	else if (v_type == VAR_BLOB && lp->ll_tv->vval.v_blob == NULL)
 	    r = rettv_blob_alloc(lp->ll_tv);
 	if (r == FAIL)
-	    return NULL;
+	    goto done;
 
 	if (lp->ll_range)
 	{
 	    if (!quiet)
 		emsg(_(e_slice_must_come_last));
-	    return NULL;
+	    goto done;
 	}
 #ifdef LOG_LOCKVAR
 	ch_log(NULL, "LKVAR: get_lval() loop: p: %s, type: %s", p,
@@ -1757,7 +1822,7 @@ get_lval_subscript(
 	    {
 		if (!quiet)
 		    emsg(_(e_cannot_use_empty_key_for_dictionary));
-		return NULL;
+		goto done;
 	    }
 	    p = key + len;
 	}
@@ -1771,13 +1836,10 @@ get_lval_subscript(
 	    {
 		empty1 = FALSE;
 		if (eval1(&p, &var1, &EVALARG_EVALUATE) == FAIL)  // recursive!
-		    return NULL;
+		    goto done;
 		if (tv_get_string_chk(&var1) == NULL)
-		{
 		    // not a number or string
-		    clear_tv(&var1);
-		    return NULL;
-		}
+		    goto done;
 		p = skipwhite(p);
 	    }
 
@@ -1788,8 +1850,7 @@ get_lval_subscript(
 		{
 		    if (!quiet)
 			emsg(_(e_cannot_slice_dictionary));
-		    clear_tv(&var1);
-		    return NULL;
+		    goto done;
 		}
 		if (rettv != NULL
 			&& !(rettv->v_type == VAR_LIST
@@ -1799,8 +1860,7 @@ get_lval_subscript(
 		{
 		    if (!quiet)
 			emsg(_(e_slice_requires_list_or_blob_value));
-		    clear_tv(&var1);
-		    return NULL;
+		    goto done;
 		}
 		p = skipwhite(p + 1);
 		if (*p == ']')
@@ -1810,17 +1870,10 @@ get_lval_subscript(
 		    lp->ll_empty2 = FALSE;
 		    // recursive!
 		    if (eval1(&p, &var2, &EVALARG_EVALUATE) == FAIL)
-		    {
-			clear_tv(&var1);
-			return NULL;
-		    }
+			goto done;
 		    if (tv_get_string_chk(&var2) == NULL)
-		    {
 			// not a number or string
-			clear_tv(&var1);
-			clear_tv(&var2);
-			return NULL;
-		    }
+			goto done;
 		}
 		lp->ll_range = TRUE;
 	    }
@@ -1831,9 +1884,7 @@ get_lval_subscript(
 	    {
 		if (!quiet)
 		    emsg(_(e_missing_closing_square_brace));
-		clear_tv(&var1);
-		clear_tv(&var2);
-		return NULL;
+		goto done;
 	    }
 
 	    // Skip to past ']'.
@@ -1851,35 +1902,44 @@ get_lval_subscript(
 	{
 	    glv_status_T glv_status;
 
-	    glv_status = get_lval_dict_item(name, lp, key, len, &p, &var1,
+	    glv_status = get_lval_dict_item(lp, name, key, len, &p, &var1,
 							flags, unlet, rettv);
 	    if (glv_status == GLV_FAIL)
-		return NULL;
+		goto done;
 	    if (glv_status == GLV_STOP)
 		break;
 	}
 	else if (v_type == VAR_BLOB)
 	{
 	    if (get_lval_blob(lp, &var1, &var2, empty1, quiet) == FAIL)
-		return NULL;
+		goto done;
 
 	    break;
 	}
 	else if (v_type == VAR_LIST)
 	{
 	    if (get_lval_list(lp, &var1, &var2, empty1, flags, quiet) == FAIL)
-		return NULL;
+		goto done;
 	}
 	else  // v_type == VAR_CLASS || v_type == VAR_OBJECT
 	{
-	    if (get_lval_class_or_obj(cl_exec, v_type, lp, key, p, flags,
-			quiet) == FAIL)
-		return NULL;
+	    if (get_lval_class_or_obj(lp, key, p, v_type, cl_exec, flags,
+							quiet) == FAIL)
+		goto done;
 	}
+
+	clear_tv(&var1);
+	clear_tv(&var2);
+	var1.v_type = VAR_UNKNOWN;
+	var2.v_type = VAR_UNKNOWN;
     }
 
+    rc = OK;
+
+done:
     clear_tv(&var1);
-    return p;
+    clear_tv(&var2);
+    return rc == OK ? p : NULL;
 }
 
 /*
@@ -3996,6 +4056,120 @@ eval5(char_u **arg, typval_T *rettv, evalarg_T *evalarg)
 }
 
 /*
+ * Concatenate strings "tv1" and "tv2" and store the result in "tv1".
+ */
+    static int
+eval_concat_str(typval_T *tv1, typval_T *tv2)
+{
+    char_u	buf1[NUMBUFLEN], buf2[NUMBUFLEN];
+    char_u	*s1 = tv_get_string_buf(tv1, buf1);
+    char_u	*s2 = NULL;
+    char_u	*p;
+    int		vim9script = in_vim9script();
+
+    if (vim9script && (tv2->v_type == VAR_VOID
+		|| tv2->v_type == VAR_CHANNEL
+		|| tv2->v_type == VAR_JOB))
+	semsg(_(e_using_invalid_value_as_string_str),
+		vartype_name(tv2->v_type));
+    else if (vim9script && tv2->v_type == VAR_FLOAT)
+    {
+	vim_snprintf((char *)buf2, NUMBUFLEN, "%g",
+		tv2->vval.v_float);
+	s2 = buf2;
+    }
+    else
+	s2 = tv_get_string_buf_chk(tv2, buf2);
+    if (s2 == NULL)		// type error ?
+    {
+	clear_tv(tv1);
+	clear_tv(tv2);
+	return FAIL;
+    }
+
+    p = concat_str(s1, s2);
+    clear_tv(tv1);
+    tv1->v_type = VAR_STRING;
+    tv1->vval.v_string = p;
+
+    return OK;
+}
+
+/*
+ * Add or subtract numbers "tv1" and "tv2" and store the result in "tv1".
+ * The numbers can be whole numbers or floats.
+ */
+    static int
+eval_addsub_num(typval_T *tv1, typval_T *tv2, int op)
+{
+    int		error = FALSE;
+    varnumber_T	n1, n2;
+    float_T	f1 = 0, f2 = 0;
+
+    if (tv1->v_type == VAR_FLOAT)
+    {
+	f1 = tv1->vval.v_float;
+	n1 = 0;
+    }
+    else
+    {
+	n1 = tv_get_number_chk(tv1, &error);
+	if (error)
+	{
+	    // This can only happen for "list + non-list" or
+	    // "blob + non-blob".  For "non-list + ..." or
+	    // "something - ...", we returned before evaluating the
+	    // 2nd operand.
+	    clear_tv(tv1);
+	    clear_tv(tv2);
+	    return FAIL;
+	}
+	if (tv2->v_type == VAR_FLOAT)
+	    f1 = n1;
+    }
+    if (tv2->v_type == VAR_FLOAT)
+    {
+	f2 = tv2->vval.v_float;
+	n2 = 0;
+    }
+    else
+    {
+	n2 = tv_get_number_chk(tv2, &error);
+	if (error)
+	{
+	    clear_tv(tv1);
+	    clear_tv(tv2);
+	    return FAIL;
+	}
+	if (tv1->v_type == VAR_FLOAT)
+	    f2 = n2;
+    }
+    clear_tv(tv1);
+
+    // If there is a float on either side the result is a float.
+    if (tv1->v_type == VAR_FLOAT || tv2->v_type == VAR_FLOAT)
+    {
+	if (op == '+')
+	    f1 = f1 + f2;
+	else
+	    f1 = f1 - f2;
+	tv1->v_type = VAR_FLOAT;
+	tv1->vval.v_float = f1;
+    }
+    else
+    {
+	if (op == '+')
+	    n1 = n1 + n2;
+	else
+	    n1 = n1 - n2;
+	tv1->v_type = VAR_NUMBER;
+	tv1->vval.v_number = n1;
+    }
+
+    return OK;
+}
+
+/*
  * Handle fifth level expression:
  *	+	number addition, concatenation of list or blob
  *	-	number subtraction
@@ -4102,33 +4276,8 @@ eval6(char_u **arg, typval_T *rettv, evalarg_T *evalarg)
 	     */
 	    if (op == '.')
 	    {
-		char_u	buf1[NUMBUFLEN], buf2[NUMBUFLEN];
-		char_u	*s1 = tv_get_string_buf(rettv, buf1);
-		char_u	*s2 = NULL;
-
-		if (vim9script && (var2.v_type == VAR_VOID
-			|| var2.v_type == VAR_CHANNEL
-			|| var2.v_type == VAR_JOB))
-		    semsg(_(e_using_invalid_value_as_string_str),
-						   vartype_name(var2.v_type));
-		else if (vim9script && var2.v_type == VAR_FLOAT)
-		{
-		    vim_snprintf((char *)buf2, NUMBUFLEN, "%g",
-							    var2.vval.v_float);
-		    s2 = buf2;
-		}
-		else
-		    s2 = tv_get_string_buf_chk(&var2, buf2);
-		if (s2 == NULL)		// type error ?
-		{
-		    clear_tv(rettv);
-		    clear_tv(&var2);
+		if (eval_concat_str(rettv, &var2) == FAIL)
 		    return FAIL;
-		}
-		p = concat_str(s1, s2);
-		clear_tv(rettv);
-		rettv->v_type = VAR_STRING;
-		rettv->vval.v_string = p;
 	    }
 	    else if (op == '+' && rettv->v_type == VAR_BLOB
 						   && var2.v_type == VAR_BLOB)
@@ -4141,69 +4290,8 @@ eval6(char_u **arg, typval_T *rettv, evalarg_T *evalarg)
 	    }
 	    else
 	    {
-		int		error = FALSE;
-		varnumber_T	n1, n2;
-		float_T		f1 = 0, f2 = 0;
-
-		if (rettv->v_type == VAR_FLOAT)
-		{
-		    f1 = rettv->vval.v_float;
-		    n1 = 0;
-		}
-		else
-		{
-		    n1 = tv_get_number_chk(rettv, &error);
-		    if (error)
-		    {
-			// This can only happen for "list + non-list" or
-			// "blob + non-blob".  For "non-list + ..." or
-			// "something - ...", we returned before evaluating the
-			// 2nd operand.
-			clear_tv(rettv);
-			clear_tv(&var2);
-			return FAIL;
-		    }
-		    if (var2.v_type == VAR_FLOAT)
-			f1 = n1;
-		}
-		if (var2.v_type == VAR_FLOAT)
-		{
-		    f2 = var2.vval.v_float;
-		    n2 = 0;
-		}
-		else
-		{
-		    n2 = tv_get_number_chk(&var2, &error);
-		    if (error)
-		    {
-			clear_tv(rettv);
-			clear_tv(&var2);
-			return FAIL;
-		    }
-		    if (rettv->v_type == VAR_FLOAT)
-			f2 = n2;
-		}
-		clear_tv(rettv);
-
-		// If there is a float on either side the result is a float.
-		if (rettv->v_type == VAR_FLOAT || var2.v_type == VAR_FLOAT)
-		{
-		    if (op == '+')
-			f1 = f1 + f2;
-		    else
-			f1 = f1 - f2;
-		    rettv->v_type = VAR_FLOAT;
-		    rettv->vval.v_float = f1;
-		}
-		else
-		{
-		    if (op == '+')
-			n1 = n1 + n2;
-		    else
-			n1 = n1 - n2;
-		    rettv->v_type = VAR_NUMBER;
-		    rettv->vval.v_number = n1;
-		}
+		if (eval_addsub_num(rettv, &var2, op) == FAIL)
+		    return FAIL;
 	    }
 	    clear_tv(&var2);
 	}
@@ -4605,6 +4693,158 @@ handle_predefined(char_u *s, int len, typval_T *rettv)
 }
 
 /*
+ * Handle register contents: @r.
+ */
+    static void
+eval9_reg_contents(
+    char_u	**arg,
+    typval_T	*rettv,
+    int		evaluate)
+{
+    int		vim9script = in_vim9script();
+
+    ++*arg;	// skip '@'
+    if (evaluate)
+    {
+	if (vim9script && IS_WHITE_OR_NUL(**arg))
+	    semsg(_(e_syntax_error_at_str), *arg);
+	else if (vim9script && !valid_yank_reg(**arg, FALSE))
+	    emsg_invreg(**arg);
+	else
+	{
+	    rettv->v_type = VAR_STRING;
+	    rettv->vval.v_string = get_reg_contents(**arg,
+		    GREG_EXPR_SRC);
+	}
+    }
+    if (**arg != NUL)
+	++*arg;
+}
+
+/*
+ * Handle a nested expression: (expression) or lambda: (arg) => expr
+ */
+    static int
+eval9_nested_expr(
+    char_u	**arg,
+    typval_T	*rettv,
+    evalarg_T	*evalarg,
+    int		evaluate)
+{
+    int		ret = NOTDONE;
+    int		vim9script = in_vim9script();
+
+    if (vim9script)
+    {
+	ret = get_lambda_tv(arg, rettv, TRUE, evalarg);
+	if (ret == OK && evaluate)
+	{
+	    ufunc_T *ufunc = rettv->vval.v_partial->pt_func;
+
+	    // Compile it here to get the return type.  The return
+	    // type is optional, when it's missing use t_unknown.
+	    // This is recognized in compile_return().
+	    if (ufunc->uf_ret_type->tt_type == VAR_VOID)
+		ufunc->uf_ret_type = &t_unknown;
+	    if (compile_def_function(ufunc, FALSE,
+				get_compile_type(ufunc), NULL) == FAIL)
+	    {
+		clear_tv(rettv);
+		ret = FAIL;
+	    }
+	}
+    }
+    if (ret == NOTDONE)
+    {
+	*arg = skipwhite_and_linebreak(*arg + 1, evalarg);
+	ret = eval1(arg, rettv, evalarg);	// recursive!
+
+	*arg = skipwhite_and_linebreak(*arg, evalarg);
+	if (**arg == ')')
+	    ++*arg;
+	else if (ret == OK)
+	{
+	    emsg(_(e_missing_closing_paren));
+	    clear_tv(rettv);
+	    ret = FAIL;
+	}
+    }
+
+    return ret;
+}
+
+/*
+* Handle be a variable or function name.
+* Can also be a curly-braces kind of name: {expr}.
+*/
+    static int
+eval9_var_func_name(
+    char_u	**arg,
+    typval_T	*rettv,
+    evalarg_T	*evalarg,
+    int		evaluate,
+    char_u	**name_start)
+{
+    char_u	*s;
+    int		len;
+    char_u	*alias;
+    int		ret = OK;
+    int		vim9script = in_vim9script();
+
+    s = *arg;
+    len = get_name_len(arg, &alias, evaluate, TRUE);
+    if (alias != NULL)
+	s = alias;
+
+    if (len <= 0)
+	ret = FAIL;
+    else
+    {
+	int	flags = evalarg == NULL ? 0 : evalarg->eval_flags;
+
+	if (evaluate && vim9script && len == 1 && *s == '_')
+	{
+	    emsg(_(e_cannot_use_underscore_here));
+	    ret = FAIL;
+	}
+	else if (evaluate && vim9script && len > 2
+						&& s[0] == 's' && s[1] == ':')
+	{
+	    semsg(_(e_cannot_use_s_colon_in_vim9_script_str), s);
+	    ret = FAIL;
+	}
+	else if ((vim9script ? **arg : *skipwhite(*arg)) == '(')
+	{
+	    // "name(..."  recursive!
+	    *arg = skipwhite(*arg);
+	    ret = eval_func(arg, evalarg, s, len, rettv, flags, NULL);
+	}
+	else if (evaluate)
+	{
+	    // get the value of "true", "false", etc. or a variable
+	    ret = FAIL;
+	    if (vim9script)
+		ret = handle_predefined(s, len, rettv);
+	    if (ret == FAIL)
+	    {
+		*name_start = s;
+		ret = eval_variable(s, len, 0, rettv, NULL,
+					EVAL_VAR_VERBOSE + EVAL_VAR_IMPORT);
+	    }
+	}
+	else
+	{
+	    // skip the name
+	    check_vars(s, len);
+	    ret = OK;
+	}
+    }
+    vim_free(alias);
+
+    return ret;
+}
+
+/*
  * Handle sixth level expression:
  *  number		number constant
  *  0zFFFFFFFF		Blob constant
@@ -4643,12 +4883,9 @@ eval9(
 {
     int		evaluate = evalarg != NULL
 				      && (evalarg->eval_flags & EVAL_EVALUATE);
-    int		len;
-    char_u	*s;
     char_u	*name_start = NULL;
     char_u	*start_leader, *end_leader;
     int		ret = OK;
-    char_u	*alias;
     static int	recurse = 0;
     int		vim9script = in_vim9script();
 
@@ -4731,19 +4968,9 @@ eval9(
 		break;
 
     /*
-     * Dictionary: #{key: val, key: val}
+     * Literal Dictionary: #{key: val, key: val}
      */
-    case '#':	if (vim9script)
-		{
-		    ret = vim9_bad_comment(*arg) ? FAIL : NOTDONE;
-		}
-		else if ((*arg)[1] == '{')
-		{
-		    ++*arg;
-		    ret = eval_dict(arg, rettv, evalarg, TRUE);
-		}
-		else
-		    ret = NOTDONE;
+    case '#':	ret = eval_lit_dict(arg, rettv, evalarg);
 		break;
 
     /*
@@ -4777,64 +5004,14 @@ eval9(
     /*
      * Register contents: @r.
      */
-    case '@':	++*arg;
-		if (evaluate)
-		{
-		    if (vim9script && IS_WHITE_OR_NUL(**arg))
-			semsg(_(e_syntax_error_at_str), *arg);
-		    else if (vim9script && !valid_yank_reg(**arg, FALSE))
-			emsg_invreg(**arg);
-		    else
-		    {
-			rettv->v_type = VAR_STRING;
-			rettv->vval.v_string = get_reg_contents(**arg,
-								GREG_EXPR_SRC);
-		    }
-		}
-		if (**arg != NUL)
-		    ++*arg;
+    case '@':	eval9_reg_contents(arg, rettv, evaluate);
 		break;
 
     /*
      * nested expression: (expression).
      * or lambda: (arg) => expr
      */
-    case '(':	ret = NOTDONE;
-		if (vim9script)
-		{
-		    ret = get_lambda_tv(arg, rettv, TRUE, evalarg);
-		    if (ret == OK && evaluate)
-		    {
-			ufunc_T *ufunc = rettv->vval.v_partial->pt_func;
-
-			// Compile it here to get the return type.  The return
-			// type is optional, when it's missing use t_unknown.
-			// This is recognized in compile_return().
-			if (ufunc->uf_ret_type->tt_type == VAR_VOID)
-			    ufunc->uf_ret_type = &t_unknown;
-			if (compile_def_function(ufunc, FALSE,
-					get_compile_type(ufunc), NULL) == FAIL)
-			{
-			    clear_tv(rettv);
-			    ret = FAIL;
-			}
-		    }
-		}
-		if (ret == NOTDONE)
-		{
-		    *arg = skipwhite_and_linebreak(*arg + 1, evalarg);
-		    ret = eval1(arg, rettv, evalarg);	// recursive!
-
-		    *arg = skipwhite_and_linebreak(*arg, evalarg);
-		    if (**arg == ')')
-			++*arg;
-		    else if (ret == OK)
-		    {
-			emsg(_(e_missing_closing_paren));
-			clear_tv(rettv);
-			ret = FAIL;
-		    }
-		}
+    case '(':	ret = eval9_nested_expr(arg, rettv, evalarg, evaluate);
 		break;
 
     default:	ret = NOTDONE;
@@ -4847,55 +5024,7 @@ eval9(
 	 * Must be a variable or function name.
 	 * Can also be a curly-braces kind of name: {expr}.
 	 */
-	s = *arg;
-	len = get_name_len(arg, &alias, evaluate, TRUE);
-	if (alias != NULL)
-	    s = alias;
-
-	if (len <= 0)
-	    ret = FAIL;
-	else
-	{
-	    int	    flags = evalarg == NULL ? 0 : evalarg->eval_flags;
-
-	    if (evaluate && vim9script && len == 1 && *s == '_')
-	    {
-		emsg(_(e_cannot_use_underscore_here));
-		ret = FAIL;
-	    }
-	    else if (evaluate && vim9script && len > 2
-						 && s[0] == 's' && s[1] == ':')
-	    {
-		semsg(_(e_cannot_use_s_colon_in_vim9_script_str), s);
-		ret = FAIL;
-	    }
-	    else if ((vim9script ? **arg : *skipwhite(*arg)) == '(')
-	    {
-		// "name(..."  recursive!
-		*arg = skipwhite(*arg);
-		ret = eval_func(arg, evalarg, s, len, rettv, flags, NULL);
-	    }
-	    else if (evaluate)
-	    {
-		// get the value of "true", "false", etc. or a variable
-		ret = FAIL;
-		if (vim9script)
-		    ret = handle_predefined(s, len, rettv);
-		if (ret == FAIL)
-		{
-		    name_start = s;
-		    ret = eval_variable(s, len, 0, rettv, NULL,
-					   EVAL_VAR_VERBOSE + EVAL_VAR_IMPORT);
-		}
-	    }
-	    else
-	    {
-		// skip the name
-		check_vars(s, len);
-		ret = OK;
-	    }
-	}
-	vim_free(alias);
+	ret = eval9_var_func_name(arg, rettv, evalarg, evaluate, &name_start);
     }
 
     // Handle following '[', '(' and '.' for expr[expr], expr.name,
@@ -5742,23 +5871,27 @@ func_tv2string(typval_T *tv, char_u **tofree, int echo_style)
 
     if (echo_style)
     {
-	r = tv->vval.v_string == NULL ? (char_u *)"function()"
-				: make_ufunc_name_readable(tv->vval.v_string,
-						buf, MAX_FUNC_NAME_LEN);
-	if (r == buf && tv->vval.v_string != NULL)
-	{
-	    r = vim_strsave(buf);
-	    *tofree = r;
-	}
+	*tofree = NULL;
+
+	if (tv->vval.v_string == NULL)
+	    r = (char_u *)"function()";
 	else
-	    *tofree = NULL;
+	{
+	    r = make_ufunc_name_readable(tv->vval.v_string, buf,
+							MAX_FUNC_NAME_LEN);
+	    if (r == buf)
+		r = *tofree = vim_strsave(buf);
+	}
     }
     else
     {
-	*tofree = string_quote(tv->vval.v_string == NULL ? NULL
-				: make_ufunc_name_readable(tv->vval.v_string,
-					buf, MAX_FUNC_NAME_LEN), TRUE);
-	r = *tofree;
+	char_u *s = NULL;
+
+	if (tv->vval.v_string != NULL)
+	    s = make_ufunc_name_readable(tv->vval.v_string, buf,
+							MAX_FUNC_NAME_LEN);
+
+	r = *tofree = string_quote(s, TRUE);
     }
 
     return r;
