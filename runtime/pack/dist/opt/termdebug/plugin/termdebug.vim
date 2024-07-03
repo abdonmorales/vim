@@ -4,7 +4,7 @@ vim9script
 
 # Author: Bram Moolenaar
 # Copyright: Vim license applies, see ":help license"
-# Last Change: 2024 Jun 20
+# Last Change: 2024 Jun 22
 # Converted to Vim9: Ubaldo Tiberi <ubaldo.tiberi@gmail.com>
 
 # WORK IN PROGRESS - The basics works stable, more to come
@@ -58,9 +58,14 @@ g:termdebug_is_running = false
 command -nargs=* -complete=file -bang Termdebug StartDebug(<bang>0, <f-args>)
 command -nargs=+ -complete=file -bang TermdebugCommand StartDebugCommand(<bang>0, <f-args>)
 
+enum Way
+  Prompt,
+  Terminal
+endenum
+
 # Script variables declaration. These variables are re-initialized at every
 # Termdebug instance
-var way: string
+var way: Way
 var err: string
 
 var pc_id: number
@@ -81,7 +86,7 @@ var varbufnr: number
 var varbufname: string
 var asmbufnr: number
 var asmbufname: string
-var promptbuf: number
+var promptbufnr: number
 # This is for the "debugged-program" thing
 var ptybufnr: number
 var ptybufname: string
@@ -133,16 +138,15 @@ var saved_K_map: dict<any>
 var saved_plus_map: dict<any>
 var saved_minus_map: dict<any>
 
-
 def InitScriptVariables()
   if exists('g:termdebug_config') && has_key(g:termdebug_config, 'use_prompt')
-    way = g:termdebug_config['use_prompt'] ? 'prompt' : 'terminal'
+    way = g:termdebug_config['use_prompt'] ? Way.Prompt : Way.Terminal
   elseif exists('g:termdebug_use_prompt')
-    way = g:termdebug_use_prompt
+    way = g:termdebug_use_prompt ? Way.Prompt : Way.Terminal
   elseif has('terminal') && !has('win32')
-    way = 'terminal'
+    way = Way.Terminal
   else
-    way = 'prompt'
+    way = Way.Prompt
   endif
   err = ''
 
@@ -163,7 +167,7 @@ def InitScriptVariables()
   varbufname = 'Termdebug-variables-listing'
   asmbufnr = 0
   asmbufname = 'Termdebug-asm-listing'
-  promptbuf = 0
+  promptbufnr = 0
   # This is for the "debugged-program" thing
   ptybufname = "debugged-program"
   ptybufnr = 0
@@ -219,11 +223,11 @@ def SanityCheck(): bool
   var is_check_ok = true
   # Need either the +terminal feature or +channel and the prompt buffer.
   # The terminal feature does not work with gdb on win32.
-  if (way ==# 'prompt') && !has('channel')
+  if (way is Way.Prompt) && !has('channel')
     err = 'Cannot debug, +channel feature is not supported'
-  elseif way ==# 'prompt' && !exists('*prompt_setprompt')
+  elseif (way is Way.Prompt) && !exists('*prompt_setprompt')
     err = 'Cannot debug, missing prompt buffer support'
-  elseif way ==# 'prompt' && !empty(glob(gdb_cmd))
+  elseif (way is Way.Prompt) && !empty(glob(gdb_cmd))
     err = $"You have a file/folder named '{gdb_cmd}' in the current directory Termdebug may not work properly. Please exit and rename such a file/folder."
   elseif !empty(glob(asmbufname))
     err = $"You have a file/folder named '{asmbufname}' in the current directory Termdebug may not work properly. Please exit and rename such a file/folder."
@@ -261,7 +265,7 @@ enddef
 
 # Define the default highlighting, using the current 'background' value.
 def InitHighlight()
-  Highlight(1, '', &background)
+  Highlight(true, '', &background)
   hi default debugBreakpoint term=reverse ctermbg=red guibg=red
   hi default debugBreakpointDisabled term=reverse ctermbg=gray guibg=gray
 enddef
@@ -338,7 +342,7 @@ def StartDebug_internal(dict: dict<any>)
     vvertical = false
   endif
 
-  if way == 'prompt'
+  if way is Way.Prompt
     StartDebug_prompt(dict)
   else
     StartDebug_term(dict)
@@ -364,38 +368,29 @@ enddef
 
 # Use when debugger didn't start or ended.
 def CloseBuffers()
-  var buf_numbers = [ptybufnr, commbufnr, asmbufnr, varbufnr]
+  var buf_numbers = [promptbufnr, ptybufnr, commbufnr, asmbufnr, varbufnr]
   for buf_nr in buf_numbers
     if buf_nr > 0 && bufexists(buf_nr)
       exe $'bwipe! {buf_nr}'
     endif
   endfor
-
-  running = false
-  gdbwin = 0
 enddef
 
 def IsGdbStarted(): bool
   var gdbproc_status = job_status(term_getjob(gdbbufnr))
   if gdbproc_status !=# 'run'
-    var cmd_name = string(GetCommand()[0])
-    Echoerr($'{cmd_name} exited unexpectedly')
-    CloseBuffers()
     return false
   endif
   return true
 enddef
 
-# Open a terminal window without a job, to run the debugged program in.
-def StartDebug_term(dict: dict<any>)
+def CreateProgramPty(): string
   ptybufnr = term_start('NONE', {
     term_name: ptybufname,
     vertical: vvertical})
   if ptybufnr == 0
-    Echoerr('Failed to open the program terminal window')
-    return
+    return null_string
   endif
-  var pty = job_info(term_getjob(ptybufnr))['tty_out']
   ptywin = win_getid()
 
   if vvertical
@@ -408,6 +403,10 @@ def StartDebug_term(dict: dict<any>)
     endif
   endif
 
+  return job_info(term_getjob(ptybufnr))['tty_out']
+enddef
+
+def CreateCommunicationPty(): string
   # Create a hidden terminal window to communicate with gdb
   commbufnr = term_start('NONE', {
     term_name: commbufname,
@@ -415,12 +414,12 @@ def StartDebug_term(dict: dict<any>)
     hidden: 1
   })
   if commbufnr == 0
-    Echoerr('Failed to open the communication terminal window')
-    exe $'bwipe! {ptybufnr}'
-    return
+    return null_string
   endif
-  var commpty = job_info(term_getjob(commbufnr))['tty_out']
+  return job_info(term_getjob(commbufnr))['tty_out']
+enddef
 
+def CreateGdbConsole(dict: dict<any>, pty: string, commpty: string): string
   # Start the gdb buffer
   var gdb_args = get(dict, 'gdb_args', [])
   var proc_args = get(dict, 'proc_args', [])
@@ -460,9 +459,7 @@ def StartDebug_term(dict: dict<any>)
         term_finish: 'close',
         })
   if gdbbufnr == 0
-    Echoerr('Failed to open the gdb terminal window')
-    CloseBuffers()
-    return
+    return 'Failed to open the gdb terminal window'
   endif
   gdbwin = win_getid()
 
@@ -476,8 +473,7 @@ def StartDebug_term(dict: dict<any>)
   var success = false
   while !success && counter < counter_max
     if !IsGdbStarted()
-      CloseBuffers()
-      return
+      return $'{gdbbufname} exited unexpectedly'
     endif
 
     for lnum in range(1, 200)
@@ -492,9 +488,7 @@ def StartDebug_term(dict: dict<any>)
   endwhile
 
   if !success
-    Echoerr('Failed to startup the gdb program.')
-    CloseBuffers()
-    return
+    return 'Failed to startup the gdb program.'
   endif
 
   # ---- gdb started. Next, let's set the MI interface. ---
@@ -514,7 +508,7 @@ def StartDebug_term(dict: dict<any>)
   success = false
   while !success && counter < counter_max
     if !IsGdbStarted()
-      return
+      return $'{gdbbufname} exited unexpectedly'
     endif
 
     var response = ''
@@ -525,10 +519,8 @@ def StartDebug_term(dict: dict<any>)
         # response can be in the same line or the next line
         response = $"{line1}{line2}"
         if response =~ 'Undefined command'
-          Echoerr('Sorry, your gdb is too old, gdb 7.12 is required')
           # CHECKME: possibly send a "server show version" here
-          CloseBuffers()
-          return
+          return 'Sorry, your gdb is too old, gdb 7.12 is required'
         endif
         if response =~ 'New UI allocated'
           # Success!
@@ -547,11 +539,37 @@ def StartDebug_term(dict: dict<any>)
   endwhile
 
   if !success
-    Echoerr('Cannot check if your gdb works, continuing anyway')
+    return 'Cannot check if your gdb works, continuing anyway'
+  endif
+  return ''
+enddef
+
+
+# Open a terminal window without a job, to run the debugged program in.
+def StartDebug_term(dict: dict<any>)
+
+  var programpty = CreateProgramPty()
+  if programpty is null_string
+    Echoerr('Failed to open the program terminal window')
+    CloseBuffers()
     return
   endif
 
-  job_setoptions(term_getjob(gdbbufnr), {exit_cb: function('EndTermDebug')})
+  var commpty = CreateCommunicationPty()
+  if commpty is null_string
+    Echoerr('Failed to open the communication terminal window')
+    CloseBuffers()
+    return
+  endif
+
+  var err_message = CreateGdbConsole(dict, programpty, commpty)
+  if !empty(err_message)
+    Echoerr(err_message)
+    CloseBuffers()
+    return
+  endif
+
+  job_setoptions(term_getjob(gdbbufnr), {exit_cb: function('EndDebug')})
 
   # Set the filetype, this can be used to add mappings.
   set filetype=termdebug
@@ -570,13 +588,13 @@ def StartDebug_prompt(dict: dict<any>)
     new
   endif
   gdbwin = win_getid()
-  promptbuf = bufnr('')
-  prompt_setprompt(promptbuf, 'gdb> ')
+  promptbufnr = bufnr('')
+  prompt_setprompt(promptbufnr, 'gdb> ')
   set buftype=prompt
   exe $"file {gdbbufname}"
 
-  prompt_setcallback(promptbuf, function('PromptCallback'))
-  prompt_setinterrupt(promptbuf, function('PromptInterrupt'))
+  prompt_setcallback(promptbufnr, function('PromptCallback'))
+  prompt_setinterrupt(promptbufnr, function('PromptInterrupt'))
 
   if vvertical
     # Assuming the source code window will get a signcolumn, use two more
@@ -603,15 +621,15 @@ def StartDebug_prompt(dict: dict<any>)
 
   ch_log($'executing "{join(gdb_cmd)}"')
   gdbjob = job_start(gdb_cmd, {
-    exit_cb: function('EndPromptDebug'),
+    exit_cb: function('EndDebug'),
     out_cb: function('GdbOutCallback'),
   })
   if job_status(gdbjob) != "run"
     Echoerr('Failed to start gdb')
-    exe $'bwipe! {promptbuf}'
+    exe $'bwipe! {promptbufnr}'
     return
   endif
-  exe $'au BufUnload <buffer={promptbuf}> ++once ' ..
+  exe $'au BufUnload <buffer={promptbufnr}> ++once ' ..
        'call job_stop(gdbjob, ''kill'')'
   # Mark the buffer modified so that it's not easy to close.
   set modified
@@ -699,7 +717,7 @@ enddef
 # Send a command to gdb.  "cmd" is the string without line terminator.
 def SendCommand(cmd: string)
   ch_log($'sending to gdb: {cmd}')
-  if way == 'prompt'
+  if way is Way.Prompt
     ch_sendraw(gdb_channel, $"{cmd}\n")
   else
     term_sendkeys(commbufnr, $"{cmd}\r")
@@ -708,7 +726,7 @@ enddef
 
 # Interrupt or stop the program
 def StopCommand()
-  if way == 'prompt'
+  if way is Way.Prompt
     PromptInterrupt()
   else
     SendCommand('-exec-interrupt')
@@ -717,7 +735,7 @@ enddef
 
 # Continue the program
 def ContinueCommand()
-  if way == 'prompt'
+  if way is Way.Prompt
     SendCommand('continue')
   else
     # using -exec-continue results in CTRL-C in the gdb window not working,
@@ -729,7 +747,7 @@ enddef
 
 # This is global so that a user can create their mappings with this.
 def g:TermDebugSendCommand(cmd: string)
-  if way == 'prompt'
+  if way is Way.Prompt
     ch_sendraw(gdb_channel, $"{cmd}\n")
   else
     var do_continue = false
@@ -848,8 +866,6 @@ def DecodeMessage(quotedText: string, literal: bool): string
         #\ Note: GDB docs also mention hex encodings - the translations below work
         #\       but we keep them out for performance-reasons until we actually see
         #\       those in mi-returns
-        #\ \ ->substitute('\\0x\(\x\x\)', {-> eval('"\x' .. submatch(1) .. '"')}, 'g')
-        #\ \ ->substitute('\\0x00', NullRepl, 'g')
         ->substitute('\\\\', '\', 'g')
         ->substitute(NullRepl, '\\000', 'g')
   if !literal
@@ -887,28 +903,17 @@ def GetAsmAddr(msg: string): string
   return addr
 enddef
 
-
-def EndTermDebug(job: any, status: any)
+def EndDebug(job: any, status: any)
   if exists('#User#TermdebugStopPre')
     doauto <nomodeline> User TermdebugStopPre
   endif
 
-  if commbufnr > 0 && bufexists(commbufnr)
-    exe $'bwipe! {commbufnr}'
+  if way is Way.Prompt
+    ch_log("Returning from EndDebug()")
   endif
-  gdbwin = 0
-  EndDebugCommon()
-enddef
 
-def EndDebugCommon()
   var curwinid = win_getid()
-  var buf_numbers = [ptybufnr, asmbufnr, varbufnr]
-  for buf_nr in buf_numbers
-    if buf_nr > 0 && bufexists(buf_nr)
-      exe $'bwipe! {buf_nr}'
-    endif
-  endfor
-  running = false
+  CloseBuffers()
 
   # Restore 'signcolumn' in all buffers for which it was set.
   win_gotoid(sourcewin)
@@ -949,21 +954,6 @@ def EndDebugCommon()
   au! TermDebug
   g:termdebug_is_running = false
 enddef
-
-def EndPromptDebug(job: any, status: any)
-  if exists('#User#TermdebugStopPre')
-    doauto <nomodeline> User TermdebugStopPre
-  endif
-
-  if bufexists(promptbuf)
-    exe $'bwipe! {promptbuf}'
-  endif
-
-  EndDebugCommon()
-  gdbwin = 0
-  ch_log("Returning from EndPromptDebug()")
-enddef
-
 
 # Disassembly window - added by Michael Sartain
 #
