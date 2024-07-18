@@ -275,6 +275,8 @@ function! s:get_vim_command_type(cmd_name)
 	let menu_prefix = '^\%([acinostvx]\?\|tl\)'
 	let map_prefix  = '^[acilnostvx]\?'
 	let exclude_list =<< trim EOL
+		2match
+		3match
 		Next
 		Print
 		X
@@ -297,10 +299,14 @@ function! s:get_vim_command_type(cmd_name)
 		enddef
 		endfunction
 		execute
+		final
+		for
 		function
 		insert
+		let
 		map
 		mapclear
+		match
 		new
 		normal
 		popup
@@ -313,6 +319,7 @@ function! s:get_vim_command_type(cmd_name)
 		substitute
 		syntax
 		throw
+		unlet
 		var
 		vim9script
 	EOL
