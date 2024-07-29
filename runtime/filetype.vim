@@ -713,7 +713,7 @@ if has("fname_case")
 endif
 
 " Dracula
-au BufNewFile,BufRead *.drac,*.drc,*lvs,*lpe	setf dracula
+au BufNewFile,BufRead *.drac,*.drc,*.lvs,*.lpe	setf dracula
 
 " Datascript
 au BufNewFile,BufRead *.ds			setf datascript
@@ -915,7 +915,9 @@ au BufNewFile,BufRead gkrellmrc,gkrellmrc_?	setf gkrellmrc
 au BufNewFile,BufRead *.gleam			setf gleam
 
 " GLSL
-au BufNewFile,BufRead *.glsl			setf glsl
+" Extensions supported by Khronos reference compiler (with one exception, ".glsl")
+" https://github.com/KhronosGroup/glslang
+au BufNewFile,BufRead *.vert,*.tesc,*.tese,*.glsl,*.geom,*.frag,*.comp,*.rgen,*.rmiss,*.rchit,*.rahit,*.rint,*.rcall	setf glsl
 
 " GN (generate ninja) files
 au BufNewFile,BufRead *.gn,*.gni		setf gn
@@ -1037,7 +1039,7 @@ au BufNewFile,BufRead *.t.html			setf tilde
 " Translate shell
 au BufNewFile,BufRead init.trans,*/etc/translate-shell,.trans	setf clojure
 
-" HTML (.shtml and .stm for server side)
+" HTML (.stm for server side, .shtml is server-side or superhtml)
 au BufNewFile,BufRead *.html,*.htm,*.shtml,*.stm  call dist#ft#FThtml()
 au BufNewFile,BufRead *.cshtml			setf html
 
@@ -1194,7 +1196,7 @@ au BufNewFile,BufRead *.ipynb,*.jupyterlab-settings	setf json
 au BufNewFile,BufRead *.sublime-project,*.sublime-settings,*.sublime-workspace	setf json
 
 " Other files that look like json
-au BufNewFile,BufRead .prettierrc,.firebaserc,.stylelintrc,.lintstagedrc,flake.lock	setf json
+au BufNewFile,BufRead .prettierrc,.firebaserc,.stylelintrc,.lintstagedrc,flake.lock,deno.lock	setf json
 
 " JSONC (JSON with comments)
 au BufNewFile,BufRead *.jsonc,.babelrc,.eslintrc,.jsfmtrc	setf jsonc
@@ -1385,7 +1387,7 @@ au BufNewFile,BufRead */etc/mail/aliases,*/etc/aliases	setf mailaliases
 au BufNewFile,BufRead .mailcap,mailcap		setf mailcap
 
 " Makefile
-au BufNewFile,BufRead *[mM]akefile,*.mk,*.mak	setf make
+au BufNewFile,BufRead *[mM]akefile,*.mk,*.mak	call dist#ft#FTmake()
 au BufNewFile,BufRead Kbuild			setf make
 
 " MakeIndex
@@ -1414,8 +1416,8 @@ au BufNewFile,BufRead *.markdown,*.mdown,*.mkd,*.mkdn,*.mdwn,*.md
 	\   setf markdown |
 	\ endif
 
-" Mason
-au BufNewFile,BufRead *.mason,*.mhtml,*.comp	setf mason
+" Mason (it used to include *.comp, are those Mason files?)
+au BufNewFile,BufRead *.mason,*.mhtml	setf mason
 
 " Mathematica, Matlab, Murphi, Objective C or Octave
 au BufNewFile,BufRead *.m			call dist#ft#FTm()
@@ -1719,7 +1721,7 @@ au BufNewFile,BufRead *.pcmk				setf pcmk
 " PEM (Privacy-Enhanced Mail)
 au BufNewFile,BufRead *.pem,*.cer,*.crt,*.csr		setf pem
 
-" Perl
+" Perl or Prolog
 if has("fname_case")
   au BufNewFile,BufRead *.pl,*.PL			call dist#ft#FTpl()
 else
@@ -2193,6 +2195,10 @@ au BufNewFile,BufRead .login,.cshrc,csh.cshrc,csh.login,csh.logout,*.csh,.alias 
 
 " Zig and Zig Object Notation (ZON)
 au BufNewFile,BufRead *.zig,*.zon		setf zig
+
+" Ziggy and Ziggy Schema
+au BufNewFile,BufRead *.ziggy                   setf ziggy
+au BufNewFile,BufRead *.ziggy-schema            setf ziggy_schema
 
 " Zserio
 au BufNewFile,BufRead *.zs			setf zserio
