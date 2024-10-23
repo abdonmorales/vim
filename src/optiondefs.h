@@ -74,6 +74,7 @@
 #define PV_FP		OPT_BOTH(OPT_BUF(BV_FP))
 #ifdef FEAT_EVAL
 # define PV_FEX		OPT_BUF(BV_FEX)
+# define PV_FEXPR	OPT_BOTH(OPT_BUF(BV_FEXPR))
 #endif
 #define PV_FF		OPT_BUF(BV_FF)
 #define PV_FLP		OPT_BUF(BV_FLP)
@@ -653,6 +654,10 @@ static struct vimoption options[] =
 			    {(char_u *)0L, (char_u *)0L}
 #endif
 			    SCTX_INIT},
+    {"completeitemalign", "cia", P_STRING|P_VI_DEF|P_ONECOMMA|P_NODUP,
+			    (char_u *)&p_cia, PV_NONE, did_set_completeitemalign, NULL,
+			    {(char_u *)"abbr,kind,menu", (char_u *)0L}
+			    SCTX_INIT},
     {"completeopt",   "cot",  P_STRING|P_VI_DEF|P_ONECOMMA|P_NODUP,
 			    (char_u *)&p_cot, PV_COT, did_set_completeopt, expand_set_completeopt,
 			    {(char_u *)"menu,preview", (char_u *)0L}
@@ -953,6 +958,15 @@ static struct vimoption options[] =
 			    (char_u *)&p_fcs, PV_FCS, did_set_chars_option, expand_set_chars_option,
 			    {(char_u *)"vert:|,fold:-,eob:~,lastline:@",
 								  (char_u *)0L}
+			    SCTX_INIT},
+    {"findexpr",   "fexpr", P_STRING|P_ALLOCED|P_VI_DEF|P_VIM|P_SECURE,
+#if defined(FEAT_EVAL)
+			    (char_u *)&p_fexpr, PV_FEXPR, did_set_optexpr, NULL,
+			    {(char_u *)"", (char_u *)0L}
+#else
+			    (char_u *)NULL, PV_NONE, NULL, NULL,
+			    {(char_u *)0L, (char_u *)0L}
+#endif
 			    SCTX_INIT},
     {"fixendofline",  "fixeol", P_BOOL|P_VI_DEF|P_RSTAT,
 			    (char_u *)&p_fixeol, PV_FIXEOL,
@@ -1452,7 +1466,7 @@ static struct vimoption options[] =
 #endif
 				(char_u *)0L} SCTX_INIT},
     {"iskeyword",   "isk",  P_STRING|P_ALLOCED|P_VIM|P_COMMA|P_NODUP,
-			    (char_u *)&p_isk, PV_ISK, did_set_isopt, NULL,
+			    (char_u *)&p_isk, PV_ISK, did_set_iskeyword, NULL,
 			    {
 				(char_u *)"@,48-57,_",
 #if defined(MSWIN)
@@ -2559,7 +2573,7 @@ static struct vimoption options[] =
 			    SCTX_INIT},
     {"termwinscroll", "twsl", P_NUM|P_VI_DEF|P_VIM|P_RBUF,
 #ifdef FEAT_TERMINAL
-			    (char_u *)&p_twsl, PV_TWSL, NULL, NULL,
+			    (char_u *)&p_twsl, PV_TWSL, did_set_termwinscroll, NULL,
 			    {(char_u *)10000L, (char_u *)10000L}
 #else
 			    (char_u *)NULL, PV_NONE, NULL, NULL,

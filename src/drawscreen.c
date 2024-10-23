@@ -1906,9 +1906,13 @@ win_update(win_T *wp)
 		    // Correct the first entry for filler lines at the top
 		    // when it won't get updated below.
 		    if (wp->w_p_diff && bot_start > 0)
-			wp->w_lines[0].wl_size =
-			    plines_win_nofill(wp, wp->w_topline, TRUE)
-							      + wp->w_topfill;
+		    {
+			int n = plines_win_nofill(wp, wp->w_topline, FALSE)
+			      + wp->w_topfill - adjust_plines_for_skipcol(wp);
+			if (n > wp->w_height)
+			    n = wp->w_height;
+			wp->w_lines[0].wl_size = n;
+		    }
 #endif
 		}
 	    }
@@ -2774,7 +2778,7 @@ win_update(win_T *wp)
 		    redrawWinline(wp, wp->w_cursor.lnum);
 	    }
 #endif
-	    // New redraw either due to updated topline or due to wcol fix.
+	    // New redraw either due to updated topline, wcol fix or reset skipcol.
 	    if (wp->w_redr_type != 0)
 	    {
 		// Don't update for changes in buffer again.
@@ -2782,6 +2786,7 @@ win_update(win_T *wp)
 		curbuf->b_mod_set = FALSE;
 		j = curbuf->b_mod_xlines;
 		curbuf->b_mod_xlines = 0;
+		curs_columns(TRUE);
 		win_update(curwin);
 		curbuf->b_mod_set = i;
 		curbuf->b_mod_xlines = j;

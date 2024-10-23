@@ -513,6 +513,8 @@ EXTERN char_u	*p_cpt;		// 'complete'
 EXTERN int	p_confirm;	// 'confirm'
 #endif
 EXTERN int	p_cp;		// 'compatible'
+EXTERN char_u	*p_cia;		// 'completeitemalign'
+EXTERN unsigned cia_flags;	// order flags of 'completeitemalign'
 EXTERN char_u	*p_cot;		// 'completeopt'
 EXTERN unsigned	cot_flags;	// flags from 'completeopt'
 // Keep in sync with p_cot_values in optionstr.c
@@ -594,6 +596,9 @@ EXTERN char_u	*p_ffs;		// 'fileformats'
 EXTERN int	p_fic;		// 'fileignorecase'
 EXTERN char_u	*p_ft;		// 'filetype'
 EXTERN char_u	*p_fcs;		// 'fillchar'
+#ifdef FEAT_EVAL
+EXTERN char_u	*p_fexpr;	// 'findexpr'
+#endif
 EXTERN int	p_fixeol;	// 'fixendofline'
 #ifdef FEAT_FOLDING
 EXTERN char_u	*p_fcl;		// 'foldclose'
@@ -1166,6 +1171,7 @@ enum
     , BV_EP
     , BV_ET
     , BV_FENC
+    , BV_FEXPR
     , BV_FP
 #ifdef FEAT_EVAL
     , BV_BEXPR

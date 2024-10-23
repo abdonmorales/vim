@@ -4,8 +4,8 @@
 " Date:		  May 03, 2023
 " Version:	173a
 " Last Change: {{{1
-" 	2023 Nov 21 by Vim Project: ignore wildignore when expanding $COMSPEC	(v173a)
-" 	2023 Nov 22 by Vim Project: fix handling of very long filename on longlist style	(v173a)
+"   2023 Nov 21 by Vim Project: ignore wildignore when expanding $COMSPEC	(v173a)
+"   2023 Nov 22 by Vim Project: fix handling of very long filename on longlist style	(v173a)
 "   2024 Feb 19 by Vim Project: (announce adoption)
 "   2024 Feb 29 by Vim Project: handle symlinks in tree mode correctly
 "   2024 Apr 03 by Vim Project: detect filetypes for remote edited files
@@ -23,6 +23,10 @@
 "   2024 Aug 15 by Vim Project: style changes, prevent E121 (#15501)
 "   2024 Aug 22 by Vim Project: fix mf-selection highlight (#15551)
 "   2024 Aug 22 by Vim Project: adjust echo output of mx command (#15550)
+"   2024 Sep 15 by Vim Project: more strict confirmation dialog (#15680)
+"   2024 Sep 19 by Vim Project: mf-selection highlight uses wrong pattern (#15700)
+"   2024 Sep 21 by Vim Project: remove extraneous closing bracket (#15718)
+"   2024 Oct 21 by Vim Project: remove netrwFileHandlers (#15895)
 "   }}}
 " Former Maintainer:	Charles E Campbell
 " GetLatestVimScripts: 1075 1 :AutoInstall: netrw.vim
@@ -4231,7 +4235,7 @@ fun! s:NetrwGetBuffer(islocal,dirname)
     endif
 "    call Decho("  NetrwTreeListing: bufnum#".bufnum,'~'.expand("<slnum>"))
     if !bufexists(bufnum)
-     call remove(s:netrwbuf,"NetrwTreeListing"])
+     call remove(s:netrwbuf,"NetrwTreeListing")
      let bufnum= -1
     endif
    elseif bufnr("NetrwTreeListing") != -1
@@ -5445,11 +5449,7 @@ fun! netrw#BrowseX(fname,remote)
 
   " execute the file handler
 "  call Decho("execute the file handler (if any)",'~'.expand("<slnum>"))
-  if exists("g:netrw_browsex_viewer") && g:netrw_browsex_viewer == '-'
-"   call Decho("(netrw#BrowseX) g:netrw_browsex_viewer<".g:netrw_browsex_viewer.">",'~'.expand("<slnum>"))
-   let ret= netrwFileHandlers#Invoke(exten,fname)
-
-  elseif exists("g:netrw_browsex_viewer") && executable(viewer)
+  if exists("g:netrw_browsex_viewer") && executable(viewer)
 "   call Decho("(netrw#BrowseX) g:netrw_browsex_viewer<".g:netrw_browsex_viewer.">",'~'.expand("<slnum>"))
    call s:NetrwExe("sil !".viewer." ".viewopt.s:ShellEscape(fname,1).redir)
    let ret= v:shell_error
@@ -5515,17 +5515,13 @@ fun! netrw#BrowseX(fname,remote)
 "   call Decho("(netrw#BrowseX) macunix and open",'~'.expand("<slnum>"))
    call s:NetrwExe("sil !open ".s:ShellEscape(fname,1)." ".redir)
    let ret= v:shell_error
-
   else
-   " netrwFileHandlers#Invoke() always returns 0
-"   call Decho("(netrw#BrowseX) use netrwFileHandlers",'~'.expand("<slnum>"))
-   let ret= netrwFileHandlers#Invoke(exten,fname)
+   call netrw#ErrorMsg(s:ERROR, "Couldn't find a program to open '".a:fname."'", 0)
+   let ret=0
   endif
 
-  " if unsuccessful, attempt netrwFileHandlers#Invoke()
   if ret
-"   call Decho("(netrw#BrowseX) ret=".ret," indicates unsuccessful thus far",'~'.expand("<slnum>"))
-   let ret= netrwFileHandlers#Invoke(exten,fname)
+   call netrw#ErrorMsg(s:ERROR, "Failed to open '".a:fname."'", 0)
   endif
 
   " restoring redraw! after external file handlers
@@ -6889,7 +6885,7 @@ fun! s:NetrwMarkFile(islocal,fname)
 
   let ykeep   = @@
   let curbufnr= bufnr("%")
-  let leader= '\(^\|\s\)\zs'
+  let leader= '\%(^\|\s\)\zs'
   if a:fname =~ '\a$'
    let trailer = '\>[@=|\/\*]\=\ze\%(  \|\t\|$\)'
   else
@@ -11388,7 +11384,7 @@ fun! s:NetrwLocalRm(path) range
     let ok= s:NetrwLocalRmFile(a:path,fname,all)
     if ok =~# 'q\%[uit]' || ok == "no"
      break
-    elseif ok =~# 'a\%[ll]'
+    elseif ok =~# '^a\%[ll]$'
      let all= 1
     endif
    endfor
@@ -11417,7 +11413,7 @@ fun! s:NetrwLocalRm(path) range
     let ok= s:NetrwLocalRmFile(a:path,curword,all)
     if ok =~# 'q\%[uit]' || ok == "no"
      break
-    elseif ok =~# 'a\%[ll]'
+    elseif ok =~# '^a\%[ll]$'
      let all= 1
     endif
     let ctr= ctr + 1
@@ -11464,12 +11460,12 @@ fun! s:NetrwLocalRmFile(path,fname,all)
 "    call Decho("response: ok<".ok.">",'~'.expand("<slnum>"))
     let ok= substitute(ok,'\[{y(es)},n(o),a(ll),q(uit)]\s*','','e')
 "    call Decho("response: ok<".ok."> (after sub)",'~'.expand("<slnum>"))
-    if ok =~# 'a\%[ll]'
+    if ok =~# '^a\%[ll]$'
      let all= 1
     endif
    endif
 
-   if all || ok =~# 'y\%[es]' || ok == ""
+   if all || ok =~# '^y\%[es]$' || ok == ""
     let ret= s:NetrwDelete(rmfile)
 "    call Decho("errcode=".v:shell_error." ret=".ret,'~'.expand("<slnum>"))
    endif
@@ -11485,13 +11481,13 @@ fun! s:NetrwLocalRmFile(path,fname,all)
     if ok == ""
      let ok="no"
     endif
-    if ok =~# 'a\%[ll]'
+    if ok =~# '^a\%[ll]$'
      let all= 1
     endif
    endif
    let rmfile= substitute(rmfile,'[\/]$','','e')
 
-   if all || ok =~# 'y\%[es]' || ok == ""
+   if all || ok =~# '^y\%[es]$' || ok == ""
     if delete(rmfile,"rf")
      call netrw#ErrorMsg(s:ERROR,"unable to delete directory <".rmfile.">!",103)
     endif

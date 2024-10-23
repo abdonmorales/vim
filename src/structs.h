@@ -1283,6 +1283,7 @@ typedef struct hist_entry
     int		hisnum;		// identifying number
     int		viminfo;	// when TRUE hisstr comes from viminfo
     char_u	*hisstr;	// actual entry, separator char after the NUL
+    size_t	hisstrlen;	// length of hisstr (excluding the NUL)
     time_t	time_set;	// when it was typed, zero if unknown
 } histentry_T;
 
@@ -3326,6 +3327,9 @@ struct file_buffer
     char_u	*b_p_efm;	// 'errorformat' local value
 #endif
     char_u	*b_p_ep;	// 'equalprg' local value
+#ifdef FEAT_EVAL
+    char_u	*b_p_fexpr;	// 'findexpr' local value
+#endif
     char_u	*b_p_path;	// 'path' local value
     int		b_p_ar;		// 'autoread' local value
     char_u	*b_p_tags;	// 'tags' local value
@@ -4468,14 +4472,14 @@ typedef struct
  */
 typedef struct
 {
-    char_u	*pum_text;	  // main menu text
-    char_u	*pum_kind;	  // extra kind text (may be truncated)
-    char_u	*pum_extra;	  // extra menu text (may be truncated)
-    char_u	*pum_info;	  // extra info
-    int		pum_score;	  // fuzzy match score
-    int		pum_idx;	  // index of item before sorting by score
-    int		pum_user_hlattr;  // highlight attribute to combine with
-    int		pum_user_kind_hlattr; // highlight attribute for kind
+    char_u	*pum_text;		// main menu text
+    char_u	*pum_kind;		// extra kind text (may be truncated)
+    char_u	*pum_extra;		// extra menu text (may be truncated)
+    char_u	*pum_info;		// extra info
+    int		pum_score;		// fuzzy match score
+    int		pum_idx;		// index of item before sorting by score
+    int		pum_user_abbr_hlattr;	// highlight attribute for abbr
+    int		pum_user_kind_hlattr;	// highlight attribute for kind
 } pumitem_T;
 
 /*
@@ -5086,4 +5090,3 @@ typedef struct
 
 #define KEYVALUE_ENTRY(k, v) \
     {(k), (v), STRLEN_LITERAL(v)}
-

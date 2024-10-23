@@ -269,6 +269,23 @@ func Test_xxd()
   endfor
 
 
+  " Test 19: Print C include in binary format
+  let s:test += 1
+  call writefile(['TESTabcd09'], 'XXDfile')
+  %d
+  exe '0r! ' . s:xxd_cmd . ' -i -b XXDfile'
+  $d
+  let expected =<< trim [CODE]
+    unsigned char XXDfile[] = {
+      0b01010100, 0b01000101, 0b01010011, 0b01010100, 0b01100001, 0b01100010,
+      0b01100011, 0b01100100, 0b00110000, 0b00111001, 0b00001010
+    };
+    unsigned int XXDfile_len = 11;
+  [CODE]
+
+  call assert_equal(expected, getline(1,'$'), s:Mess(s:test))
+
+
   %d
   bwipe!
   call delete('XXDfile')
@@ -468,12 +485,12 @@ func Test_xxd_little_endian_with_cols()
   enew!
   call writefile(["ABCDEF"], 'Xxdin', 'D')
   exe 'r! ' .. s:xxd_cmd .. ' -e -c6 ' .. ' Xxdin'
-  call assert_equal('00000000: 44434241     4645   ABCDEF', getline(2))
+  call assert_equal('00000000: 44434241     4645  ABCDEF', getline(2))
 
   enew!
   call writefile(["ABCDEFGHI"], 'Xxdin', 'D')
   exe 'r! ' .. s:xxd_cmd .. ' -e -c9 ' .. ' Xxdin'
-  call assert_equal('00000000: 44434241 48474645       49   ABCDEFGHI', getline(2))
+  call assert_equal('00000000: 44434241 48474645       49  ABCDEFGHI', getline(2))
 
   bwipe!
 endfunc

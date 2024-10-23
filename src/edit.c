@@ -512,6 +512,7 @@ edit(
 #ifdef FEAT_DIFF
 		&& curwin->w_topfill == old_topfill
 #endif
+		&& count <= 1
 		)
 	{
 	    mincol = curwin->w_wcol;
@@ -549,11 +550,13 @@ edit(
 	}
 
 	// May need to adjust w_topline to show the cursor.
-	update_topline();
+	if (count <= 1)
+	    update_topline();
 
 	did_backspace = FALSE;
 
-	validate_cursor();		// may set must_redraw
+	if (count <= 1)
+	    validate_cursor();		// may set must_redraw
 
 	/*
 	 * Redraw the display when no characters are waiting.
@@ -566,7 +569,8 @@ edit(
 
 	if (curwin->w_p_crb)
 	    do_check_cursorbind();
-	update_curswant();
+	if (count <= 1)
+	    update_curswant();
 	old_topline = curwin->w_topline;
 #ifdef FEAT_DIFF
 	old_topfill = curwin->w_topfill;
@@ -1621,7 +1625,8 @@ decodeModifyOtherKeys(int c)
     if (typebuf.tb_len >= 4 && (c == CSI || (c == ESC && *p == '[')))
     {
 	idx = (*p == '[');
-	if (p[idx] == '2' && p[idx + 1] == '7' && p[idx + 2] == ';')
+	if (p[idx] == '2' && p[idx + 1] == '7' && p[idx + 2] == ';' &&
+		kitty_protocol_state != KKPS_ENABLED)
 	{
 	    form = 1;
 	    idx += 3;
@@ -1636,9 +1641,10 @@ decodeModifyOtherKeys(int c)
 		break;
 	    ++idx;
 	}
+	int kitty_no_mods = argidx == 0 && kitty_protocol_state == KKPS_ENABLED;
 	if (idx < typebuf.tb_len
 		&& p[idx] == (form == 1 ? '~' : 'u')
-		&& argidx == 1)
+		&& (argidx == 1 || kitty_no_mods))
 	{
 	    // Match, consume the code.
 	    typebuf.tb_off += idx + 1;
@@ -1648,7 +1654,7 @@ decodeModifyOtherKeys(int c)
 		typebuf_was_filled = FALSE;
 #endif
 
-	    mod_mask = decode_modifiers(arg[!form]);
+	    mod_mask = kitty_no_mods ? 0 : decode_modifiers(arg[!form]);
 	    c = merge_modifyOtherKeys(arg[form], &mod_mask);
 	}
     }

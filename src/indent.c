@@ -869,11 +869,15 @@ get_number_indent(linenr_T lnum)
 
 #if defined(FEAT_LINEBREAK) || defined(PROTO)
 /*
+ * Check "briopt" as 'breakindentopt' and update the members of "wp".
  * This is called when 'breakindentopt' is changed and when a window is
  * initialized.
+ * Returns FAIL for failure, OK otherwise.
  */
     int
-briopt_check(win_T *wp)
+briopt_check(
+    char_u	*briopt,	// when NULL: use "wp->w_p_briopt"
+    win_T	*wp)		// when NULL: only check "briopt"
 {
     char_u	*p;
     int		bri_shift = 0;
@@ -882,7 +886,11 @@ briopt_check(win_T *wp)
     int		bri_list = 0;
     int		bri_vcol = 0;
 
-    p = wp->w_p_briopt;
+    if (briopt != NULL)
+	p = briopt;
+    else
+	p = wp->w_p_briopt;
+
     while (*p != NUL)
     {
 	// Note: Keep this in sync with p_briopt_values
@@ -917,6 +925,9 @@ briopt_check(win_T *wp)
 	if (*p == ',')
 	    ++p;
     }
+
+    if (wp == NULL)
+	return OK;
 
     wp->w_briopt_shift = bri_shift;
     wp->w_briopt_min   = bri_min;
@@ -1021,7 +1032,21 @@ get_breakindent_win(
 		    if (wp->w_briopt_list > 0)
 			prev_list = wp->w_briopt_list;
 		    else
-			prev_indent = (*regmatch.endp - *regmatch.startp);
+		    {
+			char_u	*ptr = *regmatch.startp;
+			char_u	*end_ptr = *regmatch.endp;
+			int	indent = 0;
+
+			// Compute the width of the matched text.
+			// Use win_chartabsize() so that TAB size is correct,
+			// while wrapping is ignored.
+			while (ptr < end_ptr)
+			{
+			    indent += win_chartabsize(wp, ptr, indent);
+			    MB_PTR_ADV(ptr);
+			}
+			prev_indent = indent;
+		    }
 		}
 		vim_regfree(regmatch.regprog);
 	    }
