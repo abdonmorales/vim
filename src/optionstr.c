@@ -30,7 +30,7 @@ static char *(p_briopt_values[]) = {"shift:", "min:", "sbr", "list:", "column:",
 #endif
 #if defined(FEAT_DIFF)
 // Note: Keep this in sync with diffopt_changed()
-static char *(p_dip_values[]) = {"filler", "context:", "iblank", "icase", "iwhite", "iwhiteall", "iwhiteeol", "horizontal", "vertical", "closeoff", "hiddenoff", "foldcolumn:", "followwrap", "internal", "indent-heuristic", "algorithm:", NULL};
+static char *(p_dip_values[]) = {"filler", "context:", "iblank", "icase", "iwhite", "iwhiteall", "iwhiteeol", "horizontal", "vertical", "closeoff", "hiddenoff", "foldcolumn:", "followwrap", "internal", "indent-heuristic", "algorithm:", "linematch:", NULL};
 static char *(p_dip_algorithm_values[]) = {"myers", "minimal", "patience", "histogram", NULL};
 #endif
 static char *(p_nf_values[]) = {"bin", "octal", "hex", "alpha", "unsigned", "blank", NULL};
@@ -120,7 +120,7 @@ static char *(p_fdm_values[]) = {"manual", "expr", "marker", "indent", "syntax",
 				NULL};
 static char *(p_fcl_values[]) = {"all", NULL};
 #endif
-static char *(p_cot_values[]) = {"menu", "menuone", "longest", "preview", "popup", "popuphidden", "noinsert", "noselect", "fuzzy", NULL};
+static char *(p_cot_values[]) = {"menu", "menuone", "longest", "preview", "popup", "popuphidden", "noinsert", "noselect", "fuzzy", "nosort", NULL};
 #ifdef BACKSLASH_IN_FILENAME
 static char *(p_csl_values[]) = {"slash", "backslash", NULL};
 #endif
@@ -313,6 +313,7 @@ check_buf_options(buf_T *buf)
     check_string_option(&buf->b_p_tsrfu);
 #endif
 #ifdef FEAT_EVAL
+    check_string_option(&buf->b_p_ffu);
     check_string_option(&buf->b_p_tfu);
 #endif
 #ifdef FEAT_KEYMAP
@@ -324,9 +325,6 @@ check_buf_options(buf_T *buf)
     check_string_option(&buf->b_p_efm);
 #endif
     check_string_option(&buf->b_p_ep);
-#ifdef FEAT_EVAL
-    check_string_option(&buf->b_p_fexpr);
-#endif
     check_string_option(&buf->b_p_path);
     check_string_option(&buf->b_p_tags);
     check_string_option(&buf->b_p_tc);
@@ -1148,6 +1146,9 @@ did_set_backupcopy(optset_T *args)
 	bkc = curbuf->b_p_bkc;
 	flags = &curbuf->b_bkc_flags;
     }
+    else if (!(args->os_flags & OPT_GLOBAL))
+	// When using :set, clear the local flags.
+	curbuf->b_bkc_flags = 0;
 
     if ((args->os_flags & OPT_LOCAL) && *bkc == NUL)
 	// make the local value empty: use the global value
@@ -1621,6 +1622,9 @@ did_set_completeopt(optset_T *args UNUSED)
 	cot = curbuf->b_p_cot;
 	flags = &curbuf->b_cot_flags;
     }
+    else if (!(args->os_flags & OPT_GLOBAL))
+	// When using :set, clear the local flags.
+	curbuf->b_cot_flags = 0;
 
     if (check_opt_strings(cot, p_cot_values, TRUE) != OK)
 	return e_invalid_argument;
@@ -3036,6 +3040,30 @@ did_set_matchpairs(optset_T *args)
     return NULL;
 }
 
+/*
+ * Process the updated 'messagesopt' option value.
+ */
+    char *
+did_set_messagesopt(optset_T *args UNUSED)
+{
+    if (messagesopt_changed() == FAIL)
+	return e_invalid_argument;
+
+    return NULL;
+}
+
+    int
+expand_set_messagesopt(optexpand_T *args, int *numMatches, char_u ***matches)
+{
+    static char *(p_mopt_values[]) = {"hit-enter", "wait:", "history:", NULL};
+    return expand_set_opt_string(
+	    args,
+	    p_mopt_values,
+	    ARRAY_LENGTH(p_mopt_values) - 1,
+	    numMatches,
+	    matches);
+}
+
 #if defined(FEAT_SPELL) || defined(PROTO)
 /*
  * The 'mkspellmem' option is changed.
@@ -3135,9 +3163,8 @@ expand_set_nrformats(optexpand_T *args, int *numMatches, char_u ***matches)
 #if defined(FEAT_EVAL) || defined(PROTO)
 /*
  * One of the '*expr' options is changed: 'balloonexpr', 'diffexpr',
- * 'findexpr', 'foldexpr', 'foldtext', 'formatexpr', 'includeexpr',
- * 'indentexpr', 'patchexpr', 'printexpr' and 'charconvert'.
- *
+ * 'foldexpr', 'foldtext', 'formatexpr', 'includeexpr', 'indentexpr',
+ * 'patchexpr', 'printexpr' and 'charconvert'.
  */
     char *
 did_set_optexpr(optset_T *args)
@@ -3327,7 +3354,12 @@ parse_statustabline_rulerformat(optset_T *args, int rulerformat)
 	if (wid && *s == '(' && (errmsg = check_stl_option(p_ruf)) == NULL)
 	    ru_wid = wid;
 	else
-	    errmsg = check_stl_option(p_ruf);
+	{
+	    // Validate the flags in 'rulerformat' only if it doesn't point to
+	    // a custom function ("%!" flag).
+	    if ((*varp)[1] != '!')
+		errmsg = check_stl_option(p_ruf);
+	}
     }
     // check 'statusline' or 'tabline' only if it doesn't start with "%!"
     else if (rulerformat || s[0] != '%' || s[1] != '!')

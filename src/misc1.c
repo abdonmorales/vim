@@ -543,11 +543,15 @@ plines_m_win(win_T *wp, linenr_T first, linenr_T last, int max)
 gchar_pos(pos_T *pos)
 {
     char_u	*ptr;
+    int		ptrlen;
 
     // When searching columns is sometimes put at the end of a line.
     if (pos->col == MAXCOL)
 	return NUL;
+    ptrlen = ml_get_len(pos->lnum);
     ptr = ml_get_pos(pos);
+    if (pos->col > ptrlen)
+	return NUL;
     if (has_mbyte)
 	return (*mb_ptr2char)(ptr);
     return (int)*ptr;
@@ -951,6 +955,17 @@ get_keystroke(void)
 
     mapped_ctrl_c = save_mapped_ctrl_c;
     return n;
+}
+
+// For overflow detection, add a digit safely to an int value.
+    static int
+vim_append_digit_int(int *value, int digit)
+{
+    int x = *value;
+    if (x > ((INT_MAX - digit) / 10))
+	return FAIL;
+    *value = x * 10 + digit;
+    return OK;
 }
 
 /*
@@ -2822,17 +2837,6 @@ may_trigger_modechanged(void)
 
     restore_v_event(v_event, &save_v_event);
 #endif
-}
-
-// For overflow detection, add a digit safely to an int value.
-    int
-vim_append_digit_int(int *value, int digit)
-{
-    int x = *value;
-    if (x > ((INT_MAX - digit) / 10))
-	return FAIL;
-    *value = x * 10 + digit;
-    return OK;
 }
 
 // For overflow detection, add a digit safely to a long value.

@@ -36,6 +36,7 @@ static void	ex_autocmd(exarg_T *eap);
 static void	ex_doautocmd(exarg_T *eap);
 static void	ex_bunload(exarg_T *eap);
 static void	ex_buffer(exarg_T *eap);
+static void	do_exbuffer(exarg_T *eap);
 static void	ex_bmodified(exarg_T *eap);
 static void	ex_bnext(exarg_T *eap);
 static void	ex_bprevious(exarg_T *eap);
@@ -101,10 +102,14 @@ static void	ex_tabs(exarg_T *eap);
 static void	ex_pclose(exarg_T *eap);
 static void	ex_ptag(exarg_T *eap);
 static void	ex_pedit(exarg_T *eap);
+static void	ex_pbuffer(exarg_T *eap);
+static void	prepare_preview_window(void);
+static void	back_to_current_window(win_T *curwin_save);
 #else
 # define ex_pclose		ex_ni
 # define ex_ptag		ex_ni
 # define ex_pedit		ex_ni
+# define ex_pbuffer		ex_ni
 #endif
 static void	ex_hide(exarg_T *eap);
 static void	ex_exit(exarg_T *eap);
@@ -5734,6 +5739,15 @@ ex_buffer(exarg_T *eap)
 {
     if (ERROR_IF_ANY_POPUP_WINDOW)
 	return;
+    do_exbuffer(eap);
+}
+
+/*
+ * ":buffer" command and alike.
+ */
+    static void
+do_exbuffer(exarg_T *eap)
+{
     if (*eap->arg)
 	eap->errmsg = ex_errmsg(e_trailing_characters_str, eap->arg);
     else
@@ -6924,74 +6938,81 @@ ex_wrongmodifier(exarg_T *eap)
 }
 
 #if defined(FEAT_EVAL) || defined(PROTO)
+
+// callback function for 'findfunc'
+static callback_T ffu_cb;
+
+    static callback_T *
+get_findfunc_callback(void)
+{
+    return *curbuf->b_p_ffu != NUL ? &curbuf->b_ffu_cb : &ffu_cb;
+}
+
 /*
- * Evaluate the 'findexpr' expression and return the result.  When evaluating
- * the expression, v:fname is set to the ":find" command argument.
+ * Call 'findfunc' to obtain a list of file names.
  */
     static list_T *
-eval_findexpr(char_u *ptr)
+call_findfunc(char_u *pat, int cmdcomplete)
 {
+    typval_T	args[3];
+    callback_T	*cb;
+    typval_T	rettv;
+    int		retval;
     sctx_T	saved_sctx = current_sctx;
-    char_u	*findexpr;
-    char_u	*arg;
-    typval_T	tv;
-    list_T	*retlist = NULL;
+    sctx_T	*ctx;
 
-    findexpr = get_findexpr();
+    args[0].v_type = VAR_STRING;
+    args[0].vval.v_string = pat;
+    args[1].v_type = VAR_BOOL;
+    args[1].vval.v_number = cmdcomplete;
+    args[2].v_type = VAR_UNKNOWN;
 
-    set_vim_var_string(VV_FNAME, ptr, -1);
-    current_sctx = curbuf->b_p_script_ctx[BV_FEXPR];
-
-    arg = skipwhite(findexpr);
-
+    // Lock the text to prevent weird things from happening.  Also disallow
+    // switching to another window, it should not be needed and may end up in
+    // Insert mode in another buffer.
     ++textlock;
 
-    // Evaluate the expression.  If the expression is "FuncName()" call the
-    // function directly.
-    if (eval0_simple_funccal(arg, &tv, NULL, &EVALARG_EVALUATE) == FAIL)
-	retlist = NULL;
-    else
-    {
-	if (tv.v_type == VAR_LIST)
-	    retlist = list_copy(tv.vval.v_list, TRUE, TRUE, get_copyID());
-	else
-	    emsg(_(e_invalid_return_type_from_findexpr));
-	clear_tv(&tv);
-    }
-    --textlock;
-    clear_evalarg(&EVALARG_EVALUATE, NULL);
+    ctx = get_option_sctx("findfunc");
+    if (ctx != NULL)
+	current_sctx = *ctx;
 
-    set_vim_var_string(VV_FNAME, NULL, 0);
+    cb = get_findfunc_callback();
+    retval = call_callback(cb, -1, &rettv, 2, args);
+
     current_sctx = saved_sctx;
+
+    --textlock;
+
+    list_T *retlist = NULL;
+
+    if (retval == OK)
+    {
+	if (rettv.v_type == VAR_LIST)
+	    retlist = list_copy(rettv.vval.v_list, FALSE, FALSE, get_copyID());
+	else
+	    emsg(_(e_invalid_return_type_from_findfunc));
+
+	clear_tv(&rettv);
+    }
 
     return retlist;
 }
 
 /*
- * Find file names matching "pat" using 'findexpr' and return it in "files".
+ * Find file names matching "pat" using 'findfunc' and return it in "files".
  * Used for expanding the :find, :sfind and :tabfind command argument.
  * Returns OK on success and FAIL otherwise.
  */
     int
-expand_findexpr(char_u *pat, char_u ***files, int *numMatches)
+expand_findfunc(char_u *pat, char_u ***files, int *numMatches)
 {
     list_T	*l;
     int		len;
-    char_u	*regpat;
 
     *numMatches = 0;
     *files = NULL;
 
-    // File name expansion uses wildchars.  But the 'findexpr' expression
-    // expects a regular expression argument.  So convert wildchars in the
-    // argument to regular expression patterns.
-    regpat = file_pat_to_reg_pat(pat, NULL, NULL, FALSE);
-    if (regpat == NULL)
-	return FAIL;
-
-    l = eval_findexpr(regpat);
-
-    vim_free(regpat);
+    l = call_findfunc(pat, VVAL_TRUE);
 
     if (l == NULL)
 	return FAIL;
@@ -7023,11 +7044,11 @@ expand_findexpr(char_u *pat, char_u ***files, int *numMatches)
 }
 
 /*
- * Use 'findexpr' to find file 'findarg'.  The 'count' argument is used to find
+ * Use 'findfunc' to find file 'findarg'.  The 'count' argument is used to find
  * the n'th matching file.
  */
     static char_u *
-findexpr_find_file(char_u *findarg, int findarg_len, int count)
+findfunc_find_file(char_u *findarg, int findarg_len, int count)
 {
     list_T	*fname_list;
     char_u	*ret_fname = NULL;
@@ -7037,7 +7058,7 @@ findexpr_find_file(char_u *findarg, int findarg_len, int count)
     cc = findarg[findarg_len];
     findarg[findarg_len] = NUL;
 
-    fname_list = eval_findexpr(findarg);
+    fname_list = call_findfunc(findarg, VVAL_FALSE);
     fname_count = list_len(fname_list);
 
     if (fname_count == 0)
@@ -7060,6 +7081,63 @@ findexpr_find_file(char_u *findarg, int findarg_len, int count)
     findarg[findarg_len] = cc;
 
     return ret_fname;
+}
+
+/*
+ * Process the 'findfunc' option value.
+ * Returns NULL on success and an error message on failure.
+ */
+    char *
+did_set_findfunc(optset_T *args UNUSED)
+{
+    int	retval;
+
+    if (args->os_flags & OPT_LOCAL)
+	// buffer-local option set
+	retval = option_set_callback_func(curbuf->b_p_ffu, &curbuf->b_ffu_cb);
+    else
+    {
+	// global option set
+	retval = option_set_callback_func(p_ffu, &ffu_cb);
+	// when using :set, free the local callback
+	if (!(args->os_flags & OPT_GLOBAL))
+	    free_callback(&curbuf->b_ffu_cb);
+    }
+
+    if (retval == FAIL)
+	return e_invalid_argument;
+
+    // If the option value starts with <SID> or s:, then replace that with
+    // the script identifier.
+    char_u	**varp = (char_u **)args->os_varp;
+    char_u	*name = get_scriptlocal_funcname(*varp);
+    if (name != NULL)
+    {
+	free_string_option(*varp);
+	*varp = name;
+    }
+
+    return NULL;
+}
+
+# if defined(EXITFREE) || defined(PROTO)
+    void
+free_findfunc_option(void)
+{
+    free_callback(&ffu_cb);
+}
+# endif
+
+/*
+ * Mark the global 'findfunc' callback with "copyID" so that it is not
+ * garbage collected.
+ */
+    int
+set_ref_in_findfunc(int copyID UNUSED)
+{
+    int abort = FALSE;
+    abort = set_ref_in_callback(&ffu_cb, copyID);
+    return abort;
 }
 #endif
 
@@ -7113,10 +7191,10 @@ ex_splitview(exarg_T *eap)
 	char_u	*file_to_find = NULL;
 	char	*search_ctx = NULL;
 
-	if (*get_findexpr() != NUL)
+	if (*get_findfunc() != NUL)
 	{
 #ifdef FEAT_EVAL
-	    fname = findexpr_find_file(eap->arg, (int)STRLEN(eap->arg),
+	    fname = findfunc_find_file(eap->arg, (int)STRLEN(eap->arg),
 				       eap->addr_count > 0 ? eap->line2 : 1);
 #endif
 	}
@@ -7397,10 +7475,10 @@ ex_find(exarg_T *eap)
     char_u	*file_to_find = NULL;
     char	*search_ctx = NULL;
 
-    if (*get_findexpr() != NUL)
+    if (*get_findfunc() != NUL)
     {
 #ifdef FEAT_EVAL
-	fname = findexpr_find_file(eap->arg, (int)STRLEN(eap->arg),
+	fname = findfunc_find_file(eap->arg, (int)STRLEN(eap->arg),
 					eap->addr_count > 0 ? eap->line2 : 1);
 #endif
     }
@@ -9373,17 +9451,43 @@ ex_ptag(exarg_T *eap)
 ex_pedit(exarg_T *eap)
 {
     win_T	*curwin_save = curwin;
+    prepare_preview_window();
 
+    // Edit the file.
+    do_exedit(eap, NULL);
+
+    back_to_current_window(curwin_save);
+}
+
+/*
+ * ":pbuffer"
+ */
+    static void
+ex_pbuffer(exarg_T *eap)
+{
+    win_T	*curwin_save = curwin;
+    prepare_preview_window();
+
+    // Go to the buffer.
+    do_exbuffer(eap);
+
+    back_to_current_window(curwin_save);
+}
+
+    static void
+prepare_preview_window(void)
+{
     if (ERROR_IF_ANY_POPUP_WINDOW)
 	return;
 
     // Open the preview window or popup and make it the current window.
     g_do_tagpreview = p_pvh;
     prepare_tagpreview(TRUE, TRUE, FALSE);
+}
 
-    // Edit the file.
-    do_exedit(eap, NULL);
-
+    static void
+back_to_current_window(win_T *curwin_save)
+{
     if (curwin != curwin_save && win_valid(curwin_save))
     {
 	// Return cursor to where we were
@@ -9538,14 +9642,16 @@ find_cmdline_var(char_u *src, size_t *usedlen)
 
     case '<':
 	target.key = 0;
-	target.value = (char *)src + 1;	    // skip over '<'
-	target.length = 0;		    // not used, see cmp_keyvalue_value_n()
+	target.value.string = src + 1;	    // skip over '<'
+	target.value.length = 0;	    // not used, see cmp_keyvalue_value_n()
 
-	entry = (keyvalue_T *)bsearch(&target, &spec_str_tab, ARRAY_LENGTH(spec_str_tab), sizeof(spec_str_tab[0]), cmp_keyvalue_value_n);
+	entry = (keyvalue_T *)bsearch(&target, &spec_str_tab,
+		ARRAY_LENGTH(spec_str_tab), sizeof(spec_str_tab[0]),
+		cmp_keyvalue_value_n);
 	if (entry == NULL)
 	    return -1;
 
-	*usedlen = entry->length + 1;
+	*usedlen = entry->value.length + 1;
 	return entry->key;
 
     default:
@@ -9594,7 +9700,7 @@ eval_vars(
     char_u	*s;
     char_u	*result;
     char_u	*resultbuf = NULL;
-    int		resultlen;
+    size_t	resultlen;
     buf_T	*buf;
     int		valid = VALID_HEAD + VALID_PATH;    // assume valid result
     int		spec_idx;
@@ -9869,12 +9975,12 @@ eval_vars(
 		break;
 	}
 
-	resultlen = (int)STRLEN(result);	// length of new string
+	resultlen = STRLEN(result);	// length of new string
 	if (src[*usedlen] == '<')	// remove the file name extension
 	{
 	    ++*usedlen;
 	    if ((s = vim_strrchr(result, '.')) != NULL && s >= gettail(result))
-		resultlen = (int)(s - result);
+		resultlen = s - result;
 	}
 	else if (!skip_mod)
 	{

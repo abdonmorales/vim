@@ -271,8 +271,10 @@ eval_expr_partial(
 	    return FAIL;
 
 	// Shortcut to call a compiled function with minimal overhead.
+	if (partial->pt_obj != NULL)
+	    partial->pt_obj->obj_refcount++;
 	r = call_def_function(partial->pt_func, argc, argv, DEF_USE_PT_ARGV,
-						partial, NULL, fc, rettv);
+					partial, partial->pt_obj, fc, rettv);
 	if (fc_arg == NULL)
 	    remove_funccal();
 	if (r == FAIL)
@@ -375,14 +377,12 @@ eval_expr_typval(
 {
     if (expr->v_type == VAR_PARTIAL)
 	return eval_expr_partial(expr, argv, argc, fc_arg, rettv);
-    else if (expr->v_type == VAR_INSTR)
+    if (expr->v_type == VAR_INSTR)
 	return exe_typval_instr(expr, rettv);
-    else if (expr->v_type == VAR_FUNC || want_func)
+    if (expr->v_type == VAR_FUNC || want_func)
 	return eval_expr_func(expr, argv, argc, rettv);
-    else
-	return eval_expr_string(expr, rettv);
 
-    return OK;
+    return eval_expr_string(expr, rettv);
 }
 
 /*
@@ -819,6 +819,8 @@ deref_function_name(
     typval_T	ref;
     char_u	*name = *arg;
     int		save_flags = 0;
+    int		evaluate = evalarg != NULL
+				      && (evalarg->eval_flags & EVAL_EVALUATE);
 
     ref.v_type = VAR_UNKNOWN;
     if (evalarg != NULL)
@@ -867,7 +869,7 @@ deref_function_name(
 	    *tofree = name;
 	}
     }
-    else
+    else if (evaluate)
     {
 	if (verbose)
 	    semsg(_(e_not_callable_type_str), name);
@@ -1489,8 +1491,17 @@ get_lval_list(
 	return FAIL;
 
     if (lp->ll_valtype != NULL && !lp->ll_range)
+    {
 	// use the type of the member
-	lp->ll_valtype = lp->ll_valtype->tt_member;
+	if (lp->ll_valtype->tt_member != NULL)
+	    lp->ll_valtype = lp->ll_valtype->tt_member;
+	else
+	    // If the LHS member type is not known (VAR_ANY), then get it from
+	    // the list item (after indexing)
+	    lp->ll_valtype = typval2type(&lp->ll_li->li_tv, get_copyID(),
+					 &lp->ll_type_list, TVTT_DO_MEMBER);
+
+    }
 
     /*
      * May need to find the item or absolute index for the second
@@ -1994,6 +2005,7 @@ get_lval(
 
     // Clear everything in "lp".
     CLEAR_POINTER(lp);
+    ga_init2(&lp->ll_type_list, sizeof(type_T *), 10);
 
     if (skip || (flags & GLV_COMPILING))
     {
@@ -2178,6 +2190,7 @@ clear_lval(lval_T *lp)
 {
     vim_free(lp->ll_exp_name);
     vim_free(lp->ll_newkey);
+    clear_type_list(&lp->ll_type_list);
 }
 
 /*
@@ -2248,7 +2261,7 @@ set_var_lval(
 
 	    // handle +=, -=, *=, /=, %= and .=
 	    di = NULL;
-	    if (eval_variable(lp->ll_name, (int)STRLEN(lp->ll_name),
+	    if (eval_variable(lp->ll_name, (int)(lp->ll_name_end - lp->ll_name),
 				 lp->ll_sid, &tv, &di, EVAL_VAR_VERBOSE) == OK)
 	    {
 		if (di != NULL && check_typval_is_value(&di->di_tv) == FAIL)
@@ -3981,7 +3994,7 @@ eval_shift_number(typval_T *tv1, typval_T *tv2, int shift_type)
 }
 
 /*
- * Handle the bitwise left/right shift operator expression:
+ * Handle fourth level expression (bitwise left/right shift operators):
  *	var1 << var2
  *	var1 >> var2
  *
@@ -4499,7 +4512,8 @@ eval7(
 }
 
 /*
- * Handle a type cast before a base level expression.
+ * Handle seventh level expression:
+ *	a type cast before a base level expression.
  * "arg" must point to the first non-white of the expression.
  * "arg" is advanced to just after the recognized expression.
  * Return OK or FAIL.
@@ -4870,7 +4884,7 @@ eval9_var_func_name(
 }
 
 /*
- * Handle sixth level expression:
+ * Handle eighth level expression:
  *  number		number constant
  *  0zFFFFFFFF		Blob constant
  *  "string"		string constant
@@ -6153,18 +6167,33 @@ jobchan_tv2string(
 class_tv2string(typval_T *tv, char_u **tofree)
 {
     char_u	*r = NULL;
+    size_t	rsize;
     class_T	*cl = tv->vval.v_class;
+    char_u	*class_name = (char_u *)"[unknown]";
+    size_t	class_namelen = 9;
     char	*s = "class";
+    size_t	slen = 5;
 
-    if (cl != NULL && IS_INTERFACE(cl))
-	s = "interface";
-    else if (cl != NULL && IS_ENUM(cl))
-	s = "enum";
-    size_t len = STRLEN(s) + 1 +
-				(cl == NULL ? 9 : STRLEN(cl->class_name)) + 1;
-    r = *tofree = alloc(len);
-    vim_snprintf((char *)r, len, "%s %s", s,
-			cl == NULL ? "[unknown]" : (char *)cl->class_name);
+    if (cl != NULL)
+    {
+	class_name = cl->class_name;
+	class_namelen = STRLEN(cl->class_name);
+	if (IS_INTERFACE(cl))
+	{
+	    s = "interface";
+	    slen = 9;
+	}
+	else if (IS_ENUM(cl))
+	{
+	    s = "enum";
+	    slen = 4;
+	}
+    }
+
+    rsize = slen + 1 + class_namelen + 1;
+    r = *tofree = alloc(rsize);
+    if (r != NULL)
+	vim_snprintf((char *)r, rsize, "%s %s", s, (char *)class_name);
 
     return r;
 }
@@ -6197,7 +6226,7 @@ object_tv2string(
     else if (copyID != 0 && obj->obj_copyID == copyID
 	    && obj->obj_class->class_obj_member_count != 0)
     {
-	size_t n = 25 + strlen((char *)obj->obj_class->class_name);
+	size_t n = 25 + STRLEN((char *)obj->obj_class->class_name);
 	r = alloc(n);
 	if (r != NULL)
 	    (void)vim_snprintf((char *)r, n, "object of %s {...}",
@@ -6911,14 +6940,14 @@ make_expanded_name(
     temp_result = eval_to_string(expr_start + 1, FALSE, FALSE);
     if (temp_result != NULL)
     {
-	retval = alloc(STRLEN(temp_result) + (expr_start - in_start)
-						   + (in_end - expr_end) + 1);
+	size_t	retvalsize = (size_t)(expr_start - in_start)
+				+ STRLEN(temp_result)
+				+ (size_t)(in_end - expr_end) + 1;
+
+	retval = alloc(retvalsize);
 	if (retval != NULL)
-	{
-	    STRCPY(retval, in_start);
-	    STRCAT(retval, temp_result);
-	    STRCAT(retval, expr_end + 1);
-	}
+	    vim_snprintf((char *)retval, retvalsize, "%s%s%s",
+				in_start, temp_result, expr_end + 1);
     }
     vim_free(temp_result);
 
@@ -7610,21 +7639,17 @@ last_set_msg(sctx_T script_ctx)
     char_u *
 do_string_sub(
     char_u	*str,
+    size_t	len,
     char_u	*pat,
     char_u	*sub,
     typval_T	*expr,
-    char_u	*flags)
+    char_u	*flags,
+    size_t	*ret_len)		// length of returned buffer
 {
-    int		sublen;
     regmatch_T	regmatch;
-    int		i;
-    int		do_all;
-    char_u	*tail;
-    char_u	*end;
     garray_T	ga;
     char_u	*ret;
     char_u	*save_cpo;
-    char_u	*zero_width = NULL;
 
     // Make 'cpoptions' empty, so that the 'l' flag doesn't work here
     save_cpo = p_cpo;
@@ -7632,14 +7657,17 @@ do_string_sub(
 
     ga_init2(&ga, 1, 200);
 
-    do_all = (flags[0] == 'g');
-
     regmatch.rm_ic = p_ic;
     regmatch.regprog = vim_regcomp(pat, RE_MAGIC + RE_STRING);
     if (regmatch.regprog != NULL)
     {
-	tail = str;
-	end = str + STRLEN(str);
+	char_u	*tail = str;
+	char_u	*end = str + len;
+	int	do_all = (flags[0] == 'g');
+	int	sublen;
+	int	i;
+	char_u	*zero_width = NULL;
+
 	while (vim_regexec_nl(&regmatch, str, (colnr_T)(tail - str)))
 	{
 	    // Skip empty match except for first match.
@@ -7694,12 +7722,20 @@ do_string_sub(
 	}
 
 	if (ga.ga_data != NULL)
+	{
 	    STRCPY((char *)ga.ga_data + ga.ga_len, tail);
+	    ga.ga_len += (int)(end - tail);
+	}
 
 	vim_regfree(regmatch.regprog);
     }
 
-    ret = vim_strsave(ga.ga_data == NULL ? str : (char_u *)ga.ga_data);
+    if (ga.ga_data != NULL)
+    {
+	str = (char_u *)ga.ga_data;
+	len = (size_t)ga.ga_len;
+    }
+    ret = vim_strnsave(str, len);
     ga_clear(&ga);
     if (p_cpo == empty_option)
 	p_cpo = save_cpo;
@@ -7712,6 +7748,9 @@ do_string_sub(
 	    set_option_value_give_err((char_u *)"cpo", 0L, save_cpo, 0);
 	free_string_option(save_cpo);
     }
+
+    if (ret_len != NULL)
+	*ret_len = len;
 
     return ret;
 }

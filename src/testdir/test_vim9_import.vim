@@ -1560,6 +1560,63 @@ def Run_Test_import_in_printexpr()
   set printexpr=
 enddef
 
+" Test for using an imported function as 'findfunc'
+func Test_import_in_findfunc()
+  call Run_Test_import_in_findfunc()
+endfunc
+
+def Run_Test_import_in_findfunc()
+  var lines =<< trim END
+    vim9script
+
+    export def FindFunc(pat: string, cmdexpand: bool): list<string>
+      var fnames = ['Xfile1.c', 'Xfile2.c', 'Xfile3.c']
+      return fnames->filter((_, v) => v =~? pat)
+    enddef
+  END
+  writefile(lines, 'Xfindfunc', 'D')
+
+  # Test using the "set" command
+  lines =<< trim END
+    vim9script
+    import './Xfindfunc' as find1
+
+    set findfunc=find1.FindFunc
+  END
+  v9.CheckScriptSuccess(lines)
+
+  enew!
+  find Xfile2
+  assert_equal('Xfile2.c', @%)
+  bwipe!
+
+  botright vert new
+  find Xfile1
+  assert_equal('Xfile1.c', @%)
+  bw!
+
+  # Test using the option variable
+  lines =<< trim END
+    vim9script
+    import './Xfindfunc' as find2
+
+    &findfunc = find2.FindFunc
+  END
+  v9.CheckScriptSuccess(lines)
+
+  enew!
+  find Xfile2
+  assert_equal('Xfile2.c', @%)
+  bwipe!
+
+  botright vert new
+  find Xfile1
+  assert_equal('Xfile1.c', @%)
+
+  set findfunc=
+  bwipe!
+enddef
+
 def Test_import_in_charconvert()
   var lines =<< trim END
       vim9script
@@ -3328,6 +3385,39 @@ def Test_import_locked_var()
     Bar.Foo = 20
   END
   v9.CheckScriptFailure(lines, 'E741: Value is locked: Foo', 3)
+enddef
+
+" Test for using an autoload imported class as the function return type
+def Test_imported_class_as_def_func_rettype()
+  var lines =<< trim END
+    vim9script
+
+    export class Foo
+      var name: string = "foo"
+    endclass
+  END
+  writefile(lines, 'Ximportclassrettype1.vim', 'D')
+
+  lines =<< trim END
+    vim9script
+
+    import autoload "./Ximportclassrettype1.vim" as A
+
+    export def CreateFoo(): A.Foo
+      return A.Foo.new()
+    enddef
+  END
+  writefile(lines, 'Ximportclassrettype2.vim', 'D')
+
+  lines =<< trim END
+    vim9script
+
+    import './Ximportclassrettype2.vim' as B
+
+    var foo = B.CreateFoo()
+    assert_equal('foo', foo.name)
+  END
+  v9.CheckScriptSuccess(lines)
 enddef
 
 " vim: ts=8 sw=2 sts=2 expandtab tw=80 fdm=marker

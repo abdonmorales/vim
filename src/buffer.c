@@ -2412,7 +2412,6 @@ free_buf_options(
     clear_string_option(&buf->b_p_fp);
 #if defined(FEAT_EVAL)
     clear_string_option(&buf->b_p_fex);
-    clear_string_option(&buf->b_p_fexpr);
 #endif
 #ifdef FEAT_CRYPT
 # ifdef FEAT_SODIUM
@@ -2485,6 +2484,8 @@ free_buf_options(
 #ifdef FEAT_EVAL
     clear_string_option(&buf->b_p_tfu);
     free_callback(&buf->b_tfu_cb);
+    clear_string_option(&buf->b_p_ffu);
+    free_callback(&buf->b_ffu_cb);
 #endif
     clear_string_option(&buf->b_p_dict);
     clear_string_option(&buf->b_p_tsr);
@@ -2984,9 +2985,9 @@ ExpandBufnames(
 	    vim_free(patc);
     }
 
-#ifdef FEAT_VIMINFO
     if (!fuzzy)
     {
+#ifdef FEAT_VIMINFO
 	if (matches != NULL)
 	{
 	    int i;
@@ -3006,13 +3007,13 @@ ExpandBufnames(
 	    }
 	    vim_free(matches);
 	}
+#endif
     }
     else
     {
 	if (fuzzymatches_to_strmatches(fuzmatch, file, count, FALSE) == FAIL)
 	    return FAIL;
     }
-#endif
 
     *num_file = count;
     return (count == 0 ? FAIL : OK);
@@ -3913,7 +3914,7 @@ fileinfo(
 		n);
 	validate_virtcol();
 	len = STRLEN(buffer);
-	col_print((char_u *)buffer + len, IOSIZE - len,
+	(void)col_print((char_u *)buffer + len, IOSIZE - len,
 		   (int)curwin->w_cursor.col + 1, (int)curwin->w_virtcol + 1);
     }
 
@@ -3945,7 +3946,7 @@ fileinfo(
     vim_free(buffer);
 }
 
-    void
+    int
 col_print(
     char_u  *buf,
     size_t  buflen,
@@ -3953,9 +3954,9 @@ col_print(
     int	    vcol)
 {
     if (col == vcol)
-	vim_snprintf((char *)buf, buflen, "%d", col);
-    else
-	vim_snprintf((char *)buf, buflen, "%d-%d", col, vcol);
+	return vim_snprintf((char *)buf, buflen, "%d", col);
+
+    return vim_snprintf((char *)buf, buflen, "%d-%d", col, vcol);
 }
 
 static char_u *lasttitle = NULL;
@@ -4819,7 +4820,7 @@ build_stl_str_hl(
 
 	case STL_ALTPERCENT:
 	    str = buf_tmp;
-	    get_rel_pos(wp, str, TMPLEN);
+	    (void)get_rel_pos(wp, str, TMPLEN);
 	    break;
 
 	case STL_SHOWCMD:
@@ -4836,7 +4837,7 @@ build_stl_str_hl(
 
 	case STL_KEYMAP:
 	    fillable = FALSE;
-	    if (get_keymap_str(wp, (char_u *)"<%s>", buf_tmp, TMPLEN))
+	    if (get_keymap_str(wp, (char_u *)"<%s>", buf_tmp, TMPLEN) > 0)
 		str = buf_tmp;
 	    break;
 	case STL_PAGENUM:
@@ -5270,7 +5271,7 @@ build_stl_str_hl(
  * Get relative cursor position in window into "buf[buflen]", in the localized
  * percentage form like %99, 99%; using "Top", "Bot" or "All" when appropriate.
  */
-    void
+    int
 get_rel_pos(
     win_T	*wp,
     char_u	*buf,
@@ -5278,9 +5279,10 @@ get_rel_pos(
 {
     long	above; // number of lines above window
     long	below; // number of lines below window
+    int		len;
 
     if (buflen < 3) // need at least 3 chars for writing
-	return;
+	return 0;
     above = wp->w_topline - 1;
 #ifdef FEAT_DIFF
     above += diff_check_fill(wp, wp->w_topline) - wp->w_topfill;
@@ -5291,28 +5293,27 @@ get_rel_pos(
 #endif
     below = wp->w_buffer->b_ml.ml_line_count - wp->w_botline + 1;
     if (below <= 0)
-	vim_strncpy(buf, (char_u *)(above == 0 ? _("All") : _("Bot")),
-		    (size_t)(buflen - 1));
+	len = vim_snprintf((char *)buf, buflen, "%s", (above == 0) ? _("All") : _("Bot"));
     else if (above <= 0)
-	vim_strncpy(buf, (char_u *)_("Top"), (size_t)(buflen - 1));
+	len = vim_snprintf((char *)buf, buflen, "%s", _("Top"));
     else
     {
 	int perc = (above > 1000000L)
-			?  (int)(above / ((above + below) / 100L))
-			:  (int)(above * 100L / (above + below));
+		    ?  (int)(above / ((above + below) / 100L))
+		    :  (int)(above * 100L / (above + below));
 
-	char *p = (char *)buf;
-	size_t l = buflen;
-	if (perc < 10)
-	{
-	    // prepend one space
-	    buf[0] = ' ';
-	    ++p;
-	    --l;
-	}
 	// localized percentage value
-	vim_snprintf(p, l, _("%d%%"), perc);
+	len = vim_snprintf((char *)buf, buflen, _("%s%d%%"), (perc < 10) ? " " : "", perc);
     }
+    if (len < 0)
+    {
+	buf[0] = NUL;
+	len = 0;
+    }
+    else if (len > buflen - 1)
+	len = buflen - 1;
+
+    return len;
 }
 
 /*

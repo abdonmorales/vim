@@ -845,6 +845,7 @@ extern int (*dyn_libintl_wputenv)(const wchar_t *envstring);
 #define EXPAND_KEYMAP		58
 #define EXPAND_DIRS_IN_CDPATH	59
 #define EXPAND_SHELLCMDLINE	60
+#define EXPAND_FINDFUNC		61
 
 
 // Values for exmode_active (0 is no exmode)
@@ -1624,6 +1625,7 @@ typedef UINT32_TYPEDEF UINT32_T;
  */
 #define MIN_COLUMNS	12	// minimal columns for screen
 #define MIN_LINES	2	// minimal lines for screen
+#define MIN_CMDHEIGHT	1	// minimal height for command line
 #define STATUS_HEIGHT	1	// height of a status line under a window
 #ifdef FEAT_MENU		// height of a status line under a window
 # define WINBAR_HEIGHT(wp)	(wp)->w_winbar_height
@@ -1990,6 +1992,7 @@ typedef int sock_T;
 // Note that gui.h is included by structs.h
 
 #include "structs.h"	// defines many structures
+#include "xdiff/xdiff.h"	// TODO: maybe remove this, but this brings in mmfile_t so it can compile
 
 #include "alloc.h"
 
@@ -2188,7 +2191,8 @@ typedef int sock_T;
 #define VV_TYPE_TYPEALIAS 107
 #define VV_TYPE_ENUM	  108
 #define VV_TYPE_ENUMVALUE 109
-#define VV_LEN		110	// number of v: vars
+#define VV_STACKTRACE	110
+#define VV_LEN		111	// number of v: vars
 
 // used for v_number in VAR_BOOL and VAR_SPECIAL
 #define VVAL_FALSE	0L	// VAR_BOOL

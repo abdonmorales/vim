@@ -277,6 +277,91 @@ func Test_CompleteDoneNone()
   au! CompleteDone
 endfunc
 
+func Test_CompleteDone_vevent_keys()
+  func OnDone()
+    let g:complete_word = get(v:event, 'complete_word', v:null)
+    let g:complete_type = get(v:event, 'complete_type', v:null)
+  endfunction
+
+  autocmd CompleteDone * :call OnDone()
+
+  func CompleteFunc(findstart, base)
+    if a:findstart
+      return col(".")
+    endif
+    return [#{word: "foo"}, #{word: "bar"}]
+  endfunc
+  set omnifunc=CompleteFunc
+  set completefunc=CompleteFunc
+  set completeopt+=menuone
+
+  new
+  call feedkeys("A\<C-X>\<C-O>\<Esc>", 'tx')
+  call assert_equal('', g:complete_word)
+  call assert_equal('omni', g:complete_type)
+
+  call feedkeys("S\<C-X>\<C-O>\<C-Y>\<Esc>", 'tx')
+  call assert_equal('foo', g:complete_word)
+  call assert_equal('omni', g:complete_type)
+
+  call feedkeys("S\<C-X>\<C-O>\<C-N>\<C-Y>\<Esc>0", 'tx')
+  call assert_equal('bar', g:complete_word)
+  call assert_equal('omni', g:complete_type)
+
+  call feedkeys("Shello vim visual v\<C-X>\<C-N>\<ESC>", 'tx')
+  call assert_equal('', g:complete_word)
+  call assert_equal('keyword', g:complete_type)
+
+  call feedkeys("Shello vim visual v\<C-X>\<C-N>\<C-Y>", 'tx')
+  call assert_equal('vim', g:complete_word)
+  call assert_equal('keyword', g:complete_type)
+
+  call feedkeys("Shello vim visual v\<C-X>\<C-N>\<C-Y>", 'tx')
+  call assert_equal('vim', g:complete_word)
+  call assert_equal('keyword', g:complete_type)
+
+  call feedkeys("Shello vim\<CR>completion test\<CR>\<C-X>\<C-l>\<C-Y>", 'tx')
+  call assert_equal('completion test', g:complete_word)
+  call assert_equal('whole_line', g:complete_type)
+
+  call feedkeys("S\<C-X>\<C-U>\<C-Y>", 'tx')
+  call assert_equal('foo', g:complete_word)
+  call assert_equal('function', g:complete_type)
+
+  inoremap <buffer> <f3> <cmd>call complete(1, ["red", "blue"])<cr>
+  call feedkeys("S\<f3>\<C-Y>", 'tx')
+  call assert_equal('red', g:complete_word)
+  call assert_equal('eval', g:complete_type)
+
+  call feedkeys("S\<C-X>\<C-V>\<C-Y>", 'tx')
+  call assert_equal('!', g:complete_word)
+  call assert_equal('cmdline', g:complete_type)
+
+  call writefile([''], 'foo_test', 'D')
+  call feedkeys("Sfoo\<C-X>\<C-F>\<C-Y>\<Esc>", 'tx')
+  call assert_equal('foo_test', g:complete_word)
+  call assert_equal('files', g:complete_type)
+
+  call writefile(['hello help'], 'test_case.txt', 'D')
+  set dictionary=test_case.txt
+  call feedkeys("ggdGSh\<C-X>\<C-K>\<C-Y>\<Esc>", 'tx')
+  call assert_equal('hello', g:complete_word)
+  call assert_equal('dictionary', g:complete_type)
+
+  set spell spelllang=en_us
+  call feedkeys("STheatre\<C-X>s\<C-Y>\<Esc>", 'tx')
+  call assert_equal('Theater', g:complete_word)
+  call assert_equal('spell', g:complete_type)
+
+  bwipe!
+  set completeopt& omnifunc& completefunc& spell& spelllang& dictionary&
+  autocmd! CompleteDone
+  delfunc OnDone
+  delfunc CompleteFunc
+  unlet g:complete_word
+  unlet g:complete_type
+endfunc
+
 func Test_CompleteDoneDict()
   au CompleteDonePre * :call <SID>CompleteDone_CheckCompletedItemDict(1)
   au CompleteDone * :call <SID>CompleteDone_CheckCompletedItemDict(0)
@@ -875,6 +960,46 @@ func Test_completeopt_buffer_local()
   call assert_equal('menu', &completeopt)
   call assert_equal('menu', &g:completeopt)
 
+  new | only
+  call setline(1, ['foofoo', 'foobar', 'foobaz', ''])
+  set completeopt&
+  setlocal completeopt=menu,fuzzy,noinsert
+  setglobal completeopt=menu,longest
+  call assert_equal('menu,fuzzy,noinsert', &completeopt)
+  call assert_equal('menu,fuzzy,noinsert', &l:completeopt)
+  call assert_equal('menu,longest', &g:completeopt)
+  call feedkeys("Gccf\<C-X>\<C-N>bz\<C-Y>", 'tnix')
+  call assert_equal('foobaz', getline('.'))
+  setlocal bufhidden=wipe
+  new | only!
+  call setline(1, ['foofoo', 'foobar', 'foobaz', ''])
+  call assert_equal('menu,longest', &completeopt)
+  call assert_equal('menu,longest', &g:completeopt)
+  call assert_equal('', &l:completeopt)
+  call feedkeys("Gccf\<C-X>\<C-N>\<C-X>\<C-Z>", 'tnix')
+  call assert_equal('foo', getline('.'))
+  bwipe!
+
+  new | only
+  call setline(1, ['foofoo', 'foobar', 'foobaz', ''])
+  set completeopt&
+  setlocal completeopt=menu,fuzzy,noinsert
+  set completeopt=menu,longest
+  call assert_equal('menu,longest', &completeopt)
+  call assert_equal('menu,longest', &g:completeopt)
+  call assert_equal('', &l:completeopt)
+  call feedkeys("Gccf\<C-X>\<C-N>\<C-X>\<C-Z>", 'tnix')
+  call assert_equal('foo', getline('.'))
+  setlocal bufhidden=wipe
+  new | only!
+  call setline(1, ['foofoo', 'foobar', 'foobaz', ''])
+  call assert_equal('menu,longest', &completeopt)
+  call assert_equal('menu,longest', &g:completeopt)
+  call assert_equal('', &l:completeopt)
+  call feedkeys("Gccf\<C-X>\<C-N>\<C-X>\<C-Z>", 'tnix')
+  call assert_equal('foo', getline('.'))
+  bwipe!
+
   set completeopt&
 endfunc
 
@@ -1391,7 +1516,7 @@ func Test_complete_item_refresh_always()
   set completefunc=Tcomplete
   exe "normal! iup\<C-X>\<C-U>\<BS>\<BS>\<BS>\<BS>\<BS>"
   call assert_equal('up', getline(1))
-  call assert_equal(2, g:CallCount)
+  call assert_equal(6, g:CallCount)
   set completeopt&
   set completefunc&
   bw!
@@ -2150,6 +2275,7 @@ func Test_thesaurusfunc_callback()
     call add(g:TsrFunc3Args, [a:findstart, a:base])
     return a:findstart ? 0 : []
   endfunc
+
   set tsrfu=s:TsrFunc3
   new
   call setline(1, 'script1')
@@ -2165,6 +2291,46 @@ func Test_thesaurusfunc_callback()
   call feedkeys("A\<C-X>\<C-T>\<Esc>", 'x')
   call assert_equal([[1, ''], [0, 'script2']], g:TsrFunc3Args)
   bw!
+
+  new | only
+  set thesaurusfunc=
+  setlocal thesaurusfunc=NoSuchFunc
+  setglobal thesaurusfunc=s:TsrFunc3
+  call assert_equal('NoSuchFunc', &thesaurusfunc)
+  call assert_equal('NoSuchFunc', &l:thesaurusfunc)
+  call assert_equal('s:TsrFunc3', &g:thesaurusfunc)
+  new | only
+  call assert_equal('s:TsrFunc3', &thesaurusfunc)
+  call assert_equal('s:TsrFunc3', &g:thesaurusfunc)
+  call assert_equal('', &l:thesaurusfunc)
+  call setline(1, 'script1')
+  let g:TsrFunc3Args = []
+  call feedkeys("A\<C-X>\<C-T>\<Esc>", 'x')
+  call assert_equal([[1, ''], [0, 'script1']], g:TsrFunc3Args)
+  bw!
+
+  new | only
+  set thesaurusfunc=
+  setlocal thesaurusfunc=NoSuchFunc
+  set thesaurusfunc=s:TsrFunc3
+  call assert_equal('s:TsrFunc3', &thesaurusfunc)
+  call assert_equal('s:TsrFunc3', &g:thesaurusfunc)
+  call assert_equal('', &l:thesaurusfunc)
+  call setline(1, 'script1')
+  let g:TsrFunc3Args = []
+  call feedkeys("A\<C-X>\<C-T>\<Esc>", 'x')
+  call assert_equal([[1, ''], [0, 'script1']], g:TsrFunc3Args)
+  setlocal bufhidden=wipe
+  new | only!
+  call assert_equal('s:TsrFunc3', &thesaurusfunc)
+  call assert_equal('s:TsrFunc3', &g:thesaurusfunc)
+  call assert_equal('', &l:thesaurusfunc)
+  call setline(1, 'script1')
+  let g:TsrFunc3Args = []
+  call feedkeys("A\<C-X>\<C-T>\<Esc>", 'x')
+  call assert_equal([[1, ''], [0, 'script1']], g:TsrFunc3Args)
+  bw!
+
   delfunc s:TsrFunc3
 
   " invalid return value
@@ -2534,7 +2700,7 @@ func Test_complete_fuzzy_match()
     if a:findstart
       return col(".")
     endif
-    return [#{word: "foo"}, #{word: "foobar"}, #{word: "fooBaz"}, #{word: "foobala"}]
+    return [#{word: "foo"}, #{word: "foobar"}, #{word: "fooBaz"}, #{word: "foobala"}, #{word: "你好吗"}, #{word: "我好"}]
   endfunc
 
   new
@@ -2689,6 +2855,26 @@ func Test_complete_fuzzy_match()
   call feedkeys("STe\<C-X>\<C-N>x\<CR>\<Esc>0", 'tx!')
   call assert_equal('Tex', getline('.'))
 
+  " test case for nosort option
+  set cot=menuone,menu,noinsert,fuzzy,nosort
+  " "fooBaz" should have a higher score when the leader is "fb".
+  " With "nosort", "foobar" should still be shown first in the popup menu.
+  call feedkeys("S\<C-x>\<C-o>fb", 'tx')
+  call assert_equal('foobar', g:word)
+  call feedkeys("S\<C-x>\<C-o>好", 'tx')
+  call assert_equal("你好吗", g:word)
+
+  set cot+=noselect
+  call feedkeys("S\<C-x>\<C-o>好", 'tx')
+  call assert_equal(v:null, g:word)
+  call feedkeys("S\<C-x>\<C-o>好\<C-N>", 'tx')
+  call assert_equal('你好吗', g:word)
+
+  " "nosort" shouldn't enable fuzzy filtering when "fuzzy" isn't present.
+  set cot=menuone,noinsert,nosort
+  call feedkeys("S\<C-x>\<C-o>fooB\<C-Y>", 'tx')
+  call assert_equal('fooBaz', getline('.'))
+
   " clean up
   set omnifunc=
   bw!
@@ -2763,6 +2949,80 @@ func Test_complete_backwards_default()
   call assert_equal('foobaz', getline('.'))
   bw!
   bw!
+endfunc
+
+func Test_complete_info_matches()
+  let g:what = ['matches']
+  func ShownInfo()
+    let g:compl_info = complete_info(g:what)
+    return ''
+  endfunc
+  set completeopt+=noinsert
+
+  new
+  call setline(1, ['aaa', 'aab', 'aba', 'abb'])
+  inoremap <buffer><F5> <C-R>=ShownInfo()<CR>
+
+  call feedkeys("Go\<C-X>\<C-N>\<F5>\<Esc>dd", 'tx')
+  call assert_equal([
+    \ {'word': 'aaa', 'menu': '', 'user_data': '', 'info': '', 'kind': '', 'abbr': ''},
+    \ {'word': 'aab', 'menu': '', 'user_data': '', 'info': '', 'kind': '', 'abbr': ''},
+    \ {'word': 'aba', 'menu': '', 'user_data': '', 'info': '', 'kind': '', 'abbr': ''},
+    \ {'word': 'abb', 'menu': '', 'user_data': '', 'info': '', 'kind': '', 'abbr': ''},
+    \], g:compl_info['matches'])
+
+  call feedkeys("Goa\<C-X>\<C-N>b\<F5>\<Esc>dd", 'tx')
+  call assert_equal([
+    \ {'word': 'aba', 'menu': '', 'user_data': '', 'info': '', 'kind': '', 'abbr': ''},
+    \ {'word': 'abb', 'menu': '', 'user_data': '', 'info': '', 'kind': '', 'abbr': ''},
+    \], g:compl_info['matches'])
+
+  " items and matches both in what
+  let g:what = ['items', 'matches']
+  call feedkeys("Goa\<C-X>\<C-N>b\<F5>\<Esc>dd", 'tx')
+  call assert_equal([
+    \ {'word': 'aaa', 'menu': '', 'user_data': '', 'match': v:false, 'info': '', 'kind': '', 'abbr': ''},
+    \ {'word': 'aab', 'menu': '', 'user_data': '', 'match': v:false, 'info': '', 'kind': '', 'abbr': ''},
+    \ {'word': 'aba', 'menu': '', 'user_data': '', 'match': v:true, 'info': '', 'kind': '', 'abbr': ''},
+    \ {'word': 'abb', 'menu': '', 'user_data': '', 'match': v:true, 'info': '', 'kind': '', 'abbr': ''},
+    \], g:compl_info['items'])
+  call assert_false(has_key(g:compl_info, 'matches'))
+
+  bw!
+  bw!
+  unlet g:what
+  delfunc ShownInfo
+  set cot&
+endfunc
+
+func Test_complete_info_completed()
+  func ShownInfo()
+    let g:compl_info = complete_info(['completed'])
+    return ''
+  endfunc
+  set completeopt+=noinsert
+
+  new
+  call setline(1, ['aaa', 'aab', 'aba', 'abb'])
+  inoremap <buffer><F5> <C-R>=ShownInfo()<CR>
+
+  call feedkeys("Go\<C-X>\<C-N>\<F5>\<Esc>dd", 'tx')
+  call assert_equal({'word': 'aaa', 'menu': '', 'user_data': '', 'info': '', 'kind': '', 'abbr': ''},  g:compl_info['completed'])
+
+  call feedkeys("Go\<C-X>\<C-N>\<C-N>\<F5>\<Esc>dd", 'tx')
+  call assert_equal({'word': 'aab', 'menu': '', 'user_data': '', 'info': '', 'kind': '', 'abbr': ''},  g:compl_info['completed'])
+
+  call feedkeys("Go\<C-X>\<C-N>\<C-N>\<C-N>\<C-N>\<F5>\<Esc>dd", 'tx')
+  call assert_equal({'word': 'abb', 'menu': '', 'user_data': '', 'info': '', 'kind': '', 'abbr': ''},  g:compl_info['completed'])
+
+  set completeopt+=noselect
+  call feedkeys("Go\<C-X>\<C-N>\<F5>\<Esc>dd", 'tx')
+  call assert_equal({}, g:compl_info)
+
+  bw!
+  bw!
+  delfunc ShownInfo
+  set cot&
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab nofoldenable

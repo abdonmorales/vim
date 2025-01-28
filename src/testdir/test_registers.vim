@@ -53,6 +53,9 @@ func Test_display_registers()
 
     " these commands work in the sandbox
     let a = execute('sandbox display')
+    " When X11 connection is not available, there is a warning W23
+    " filter this out (we could also run the :display comamand twice)
+    let a = substitute(a, 'W23.*0\n', '', '')
     let b = execute('sandbox registers')
 
     call assert_equal(a, b)
@@ -1043,6 +1046,43 @@ func Test_insert_small_delete_replace_mode()
   exe ":norm! R\<C-R>-"
   call assert_equal(['ZZZ', 'foofoo', '',  'βbβobarZZZZ'], getline(1, 4))
   bwipe!
+endfunc
+
+" Test for W24 when clipboard support is not available
+func Test_clipboard_regs_not_working()
+  CheckNotGui
+  if !has("clipboard")
+    new
+    call append(0, "text for clipboard test")
+    let mess = execute(':norm "*yiw')
+    call assert_match('W24', mess)
+    bw!
+  endif
+endfunc
+
+" Check for W23 with a Vim with clipboard support,
+" but when the connection to the X11 server does not work
+func Test_clipboard_regs_not_working2()
+  CheckNotMac
+  CheckRunVimInTerminal
+  CheckFeature clipboard
+  let display=$DISPLAY
+  unlet $DISPLAY
+  " Run in a separate Vim instance because changing 'encoding' may cause
+  " trouble for later tests.
+  let lines =<< trim END
+      unlet $DISPLAY
+      call setline(1, 'abcdefg')
+      let a=execute(':norm! "+yy')
+      call writefile([a], 'Xclipboard_result.txt')
+  END
+  call writefile(lines, 'XTest_clipboard', 'D')
+  let buf = RunVimInTerminal('-S XTest_clipboard', {})
+  call term_sendkeys(buf, "\"+yy")
+  call StopVimInTerminal(buf)
+  let result = readfile('Xclipboard_result.txt')
+  call assert_match("^\\nW23:", result[0])
+  let $DISPLAY=display
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab
