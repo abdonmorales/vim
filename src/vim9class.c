@@ -204,7 +204,13 @@ add_member(
 	m->ocm_flags |= OCMFLAG_HAS_TYPE;
     m->ocm_type = type;
     if (init_expr != NULL)
+    {
 	m->ocm_init = init_expr;
+	// Save the script context, we need it when evaluating or compiling the
+	// initializer expression.
+	m->ocm_init_sctx = current_sctx;
+	m->ocm_init_sctx.sc_lnum += SOURCING_LNUM;
+    }
     ++gap->ga_len;
     return OK;
 }
@@ -561,20 +567,34 @@ validate_abstract_class_methods(
 	    if (!IS_ABSTRACT_METHOD(uf))
 		continue;
 
-	    int method_found = FALSE;
+	    int	concrete_method_found = FALSE;
+	    int	j = 0;
 
-	    for (int j = 0; j < method_count; j++)
+	    // Check if the abstract method is already implemented in one of
+	    // the parent classes.
+	    for (j = 0; !concrete_method_found && j < i; j++)
+	    {
+		ufunc_T *uf2 = extends_methods[j];
+		if (!IS_ABSTRACT_METHOD(uf2) &&
+			STRCMP(uf->uf_name, uf2->uf_name) == 0)
+		    concrete_method_found = TRUE;
+	    }
+
+	    if (concrete_method_found)
+		continue;
+
+	    for (j = 0; j < method_count; j++)
 	    {
 		if (STRCMP(uf->uf_name, cl_fp[j]->uf_name) == 0)
 		{
-		    method_found = TRUE;
+		    concrete_method_found = TRUE;
 		    break;
 		}
 	    }
 
-	    if (!method_found)
+	    if (!concrete_method_found)
 	    {
-		semsg(_(e_abstract_method_str_not_found), uf->uf_name);
+		semsg(_(e_abstract_method_str_not_implemented), uf->uf_name);
 		return FALSE;
 	    }
 	}
@@ -1341,7 +1361,11 @@ add_class_members(class_T *cl, exarg_T *eap, garray_T *type_list_gap)
 	typval_T	*tv = &cl->class_members_tv[i];
 	if (m->ocm_init != NULL)
 	{
+	    sctx_T	save_current_sctx = current_sctx;
+
+	    current_sctx = m->ocm_init_sctx;
 	    typval_T *etv = eval_expr(m->ocm_init, eap);
+	    current_sctx = save_current_sctx;
 	    if (etv == NULL)
 		return FAIL;
 
@@ -2039,8 +2063,7 @@ early_ret:
     tv.v_type = VAR_CLASS;
     tv.vval.v_class = cl;
     SOURCING_LNUM = start_lnum;
-    int rc = set_var_const(cl->class_name, current_sctx.sc_sid,
-						NULL, &tv, FALSE, 0, 0);
+    int rc = set_var_const(cl->class_name, 0, NULL, &tv, FALSE, 0, 0);
     if (rc == FAIL)
 	goto cleanup;
 
@@ -2361,7 +2384,8 @@ early_ret:
 	{
 	    exarg_T	ea;
 	    garray_T	lines_to_free;
-	    int		is_new = STRNCMP(p, "new", 3) == 0;
+	    int		is_new = STRNCMP(p, "new", 3) == 0
+						|| STRNCMP(p, "_new", 4) == 0;
 
 	    if (has_public)
 	    {
@@ -2474,7 +2498,7 @@ early_ret:
 
     if (success && is_enum && num_enum_values == 0)
 	// Empty enum statement. Add an empty "values" class variable
-	enum_add_values_member(cl, &classmembers, 0, &type_list);
+	success = enum_add_values_member(cl, &classmembers, 0, &type_list);
 
     /*
      * Check a few things
@@ -2587,7 +2611,8 @@ early_ret:
 	for (int i = 0; i < classfunctions.ga_len; ++i)
 	{
 	    class_func = ((ufunc_T **)classfunctions.ga_data)[i];
-	    if (STRCMP(class_func->uf_name, "new") == 0)
+	    if (STRCMP(class_func->uf_name, "new") == 0
+				|| STRCMP(class_func->uf_name, "_new") == 0)
 	    {
 		have_new = TRUE;
 		break;
@@ -3625,7 +3650,7 @@ class_free_nonref(int copyID)
 set_ref_in_classes(int copyID)
 {
     for (class_T *cl = first_class; cl != NULL; cl = cl->class_next_used)
-	set_ref_in_item_class(cl, copyID, NULL, NULL);
+	set_ref_in_item_class(cl, copyID, NULL, NULL, NULL);
 
     return FALSE;
 }

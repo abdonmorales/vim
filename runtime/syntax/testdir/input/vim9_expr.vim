@@ -2,6 +2,55 @@ vim9script
 # Vim9-script expressions
 
 
+# Dictionary
+
+echo {}
+echo {   foo: 21 * 2 }
+echo { -foo-: 21 * 2 }
+echo {    42: 21 * 2 }
+echo { 'foo': 21 * 2 }
+echo { "foo": 21 * 2 }
+
+echo { foo: {   bar: 21 * 2 } }
+echo { foo: { -bar-: 21 * 2 } }
+echo { foo: {    42: 21 * 2 } }
+echo { foo: { 'bar': 21 * 2 } }
+echo { foo: { "bar": 21 * 2 } }
+
+echo { -foo-: {   bar: 21 * 2 } }
+echo { -foo-: { -bar-: 21 * 2 } }
+echo { -foo-: {    42: 21 * 2 } }
+echo { -foo-: { 'bar': 21 * 2 } }
+echo { -foo-: { "bar": 21 * 2 } }
+
+echo { 42: {   bar: 21 * 2 } }
+echo { 42: { -bar-: 21 * 2 } }
+echo { 42: {    42: 21 * 2 } }
+echo { 42: { 'bar': 21 * 2 } }
+echo { 42: { "bar": 21 * 2 } }
+
+echo { 'foo': {   bar: 21 * 2 } }
+echo { 'foo': { -bar-: 21 * 2 } }
+echo { 'foo': {    42: 21 * 2 } }
+echo { 'foo': { "bar": 21 * 2 } }
+echo { 'foo': { 'bar': 21 * 2 } }
+
+echo { "foo": {   bar: 21 * 2 } }
+echo { "foo": { -bar-: 21 * 2 } }
+echo { "foo": {    42: 21 * 2 } }
+echo { "foo": { 'bar': 21 * 2 } }
+echo { "foo": { "bar": 21 * 2 } }
+
+echo {
+  # comment
+  foo: {
+    bar: 21 * 2
+  }
+}
+
+# match as keys not scope dictionaries
+echo { b: 42, w: 42, t: 42, g: 42, l: 42, s: 42, a: 42, v: 42  }
+
 # Operators
 
 # Ternary
@@ -30,6 +79,7 @@ echo g:foo ? g:foo : g:bar
 echo $FOO ? $FOO : $BAR
 echo True() ? True() : False()
 echo @a ? @a : @b
+echo (true) ? (true) : (false)
 echo (1) ? (1) : (0)
 
 # Falsy
@@ -52,7 +102,13 @@ echo g:foo ?? g:foo
 echo $FOO ?? $FOO
 echo True() ?? True()
 echo @a ?? @a
+echo (true) ?? (true)
 echo (1) ?? (1)
+
+
+# Function calls
+
+Foo(true, false, null)
 
 
 # Command {expr} arguments

@@ -598,12 +598,10 @@ vim_strnicmp(char *s1, char *s2, size_t len)
 vim_strnicmp_asc(char *s1, char *s2, size_t len)
 {
     int                i = 0;
-    int                save_cmp_flags = cmp_flags;
 
-    cmp_flags |= CMP_KEEPASCII;		// compare by ASCII value, ignoring locale
     while (len > 0)
     {
-       i = vim_tolower(*s1) - vim_tolower(*s2);
+       i = TOLOWER_ASC(*s1) - TOLOWER_ASC(*s2);
        if (i != 0)
            break;			// this character is different
        if (*s1 == NUL)
@@ -612,7 +610,6 @@ vim_strnicmp_asc(char *s1, char *s2, size_t len)
        ++s2;
        --len;
     }
-    cmp_flags = save_cmp_flags;
     return i;
 }
 
@@ -671,22 +668,6 @@ vim_strchr(char_u *string, int c)
 	    return p;
 	++p;
     }
-    return NULL;
-}
-
-// Sized version of strchr that can handle embedded NULs.
-// Adjusts n to the new size.
-    char *
-vim_strnchr(const char *p, size_t *n, int c)
-{
-    while (*n > 0)
-    {
-	if (*p == c)
-	    return (char *)p;
-	p++;
-	(*n)--;
-    }
-
     return NULL;
 }
 
@@ -1305,7 +1286,7 @@ f_blob2str(typval_T *argvars, typval_T *rettv)
     blob_T	*blob;
     int		blen;
     long	idx;
-    int		utf8_inuse = FALSE;
+    int		validate_utf8 = FALSE;
 
     if (check_for_blob_arg(argvars, 0) == FAIL
 	    || check_for_opt_dict_arg(argvars, 1) == FAIL)
@@ -1332,7 +1313,14 @@ f_blob2str(typval_T *argvars, typval_T *rettv)
     }
 
     if (STRCMP(p_enc, "utf-8") == 0 || STRCMP(p_enc, "utf8") == 0)
-	utf8_inuse = TRUE;
+	validate_utf8 = TRUE;
+
+    if (from_encoding != NULL && STRCMP(from_encoding, "none") == 0)
+    {
+	validate_utf8 = FALSE;
+	vim_free(from_encoding);
+	from_encoding = NULL;
+    }
 
     idx = 0;
     while (idx < blen)
@@ -1351,16 +1339,16 @@ f_blob2str(typval_T *argvars, typval_T *rettv)
 	    vim_free(str);
 	    if (converted_str == NULL)
 	    {
-		semsg(_(e_str_encoding_failed), "from", from_encoding);
+		semsg(_(e_str_encoding_from_failed), from_encoding);
 		goto done;
 	    }
 	}
 
-	if (utf8_inuse)
+	if (validate_utf8)
 	{
 	    if (!utf_valid_string(converted_str, NULL))
 	    {
-		semsg(_(e_str_encoding_failed), "from", p_enc);
+		semsg(_(e_str_encoding_from_failed), p_enc);
 		vim_free(converted_str);
 		goto done;
 	    }
@@ -1426,7 +1414,7 @@ f_str2blob(typval_T *argvars, typval_T *rettv)
 	    str = convert_string(str, p_enc, to_encoding);
 	    if (str == NULL)
 	    {
-		semsg(_(e_str_encoding_failed), "to", to_encoding);
+		semsg(_(e_str_encoding_to_failed), to_encoding);
 		goto done;
 	    }
 	}
@@ -3558,8 +3546,6 @@ vim_vsnprintf_typval(
 			str_arg_l = 0;
 		    else
 		    {
-			// Don't put the #if inside memchr(), it can be a
-			// macro.
 			// memchr on HP does not like n > 2^31  !!!
 			char *q = memchr(str_arg, '\0',
 				  precision <= (size_t)0x7fffffffL ? precision
