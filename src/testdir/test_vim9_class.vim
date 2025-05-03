@@ -1921,6 +1921,21 @@ def Test_class_member()
   END
   v9.CheckSourceFailure(lines, "E1004: White space required before and after '='", 3)
 
+  # Space is not allowed before the object member variable name
+  lines =<< trim END
+    vim9script
+    class A
+      var n: number = 10
+    endclass
+
+    def Fn()
+      var a = A.new()
+      var y = a. n
+    enddef
+    defcompile
+  END
+  v9.CheckSourceFailure(lines, "E1202: No white space allowed after '.': . n", 2)
+
   # Access a non-existing member
   lines =<< trim END
     vim9script
@@ -3469,6 +3484,39 @@ def Test_super_dispatch()
     assert_equal('A', TestA(C.new()))
   END
   v9.CheckSourceSuccess(lines)
+
+  # Invoking a class method in the parent class using "super" should fail
+  lines =<< trim END
+    vim9script
+
+    class A
+      static def Fn(): string
+        return 'A'
+      enddef
+    endclass
+
+    class B extends A
+      static def Fn(): string
+        return super.Fn()
+      enddef
+    endclass
+    defcompile
+  END
+  v9.CheckSourceFailure(lines, 'E1325: Method "Fn" not found in class "B"')
+
+  # Missing name after "super" keyword
+  lines =<< trim END
+    vim9script
+    class A
+    endclass
+    class B extends A
+      def Fn()
+        var x = super.()
+      enddef
+    endclass
+    defcompile
+  END
+  v9.CheckSourceFailure(lines, 'E1127: Missing name after dot', 1)
 enddef
 
 def Test_class_import()
@@ -12454,6 +12502,24 @@ def Test_super_keyword()
   END
   v9.CheckSourceSuccess(lines)
 
+  # Using 'super' to access an static class variable in the parent should fail
+  lines =<< trim END
+    vim9script
+
+    class A
+      static var foo: string = 'xxx'
+    endclass
+
+    class B extends A
+      def GetString(): string
+        return super.foo
+      enddef
+    endclass
+
+    defcompile
+  END
+  v9.CheckSourceFailure(lines, 'E1326: Variable "foo" not found in object "B"')
+
   # Using super to access an overriden method in the parent class
   lines =<< trim END
     vim9script
@@ -12476,6 +12542,35 @@ def Test_super_keyword()
 
     var b = B.new()
     assert_equal('A.Foo B.Foo', b.Bar())
+  END
+  v9.CheckSourceSuccess(lines)
+
+  # Test for using super in a lambda function to invoke a base class method from
+  # the new() method.
+  lines =<< trim END
+    vim9script
+
+    def G(F: func): string
+      return F()
+    enddef
+
+    class Base
+      def F(): string
+        return 'Base.F()'
+      enddef
+    endclass
+
+    class Foo extends Base
+      var s: string = 'x'
+      def new()
+        this.s = G((): string => {
+          return super.F()
+        })
+      enddef
+    endclass
+
+    var f = Foo.new()
+    assert_equal('Base.F()', f.s)
   END
   v9.CheckSourceSuccess(lines)
 enddef
@@ -12806,6 +12901,187 @@ def Test_dict_of_objects()
     endtry
   END
   v9.CheckSourceSuccess(lines)
+enddef
+
+" Test for using the type() and typename() functions with a variable of type
+" object
+def Test_type_typename_funcs_with_object_variable()
+  var lines =<< trim END
+    vim9script
+
+    class A
+    endclass
+
+    class B
+    endclass
+
+    var o1: object<any>
+    assert_equal([13, 'object<any>'], [type(o1), typename(o1)])
+
+    var o2: object<A>
+    assert_equal([13, 'object<any>'], [type(o2), typename(o2)])
+
+    var o3: A
+    assert_equal([13, 'object<any>'], [type(o3), typename(o3)])
+
+    var o4 = A.new()
+    assert_equal([13, 'object<A>'], [type(o4), typename(o4)])
+
+    var l = [A.new(), B.new()]
+    assert_equal([13, 'object<B>'], [type(l[1]), typename(l[1])])
+
+    var d = {o_a: A.new(), o_b: B.new()}
+    assert_equal([13, 'object<B>'], [type(d.o_b), typename(d.o_b)])
+  END
+  v9.CheckSourceSuccess(lines)
+enddef
+
+" Test for object<any> type
+def Test_object_any_type()
+  # assigning different objects to variable of type object<any>
+  var lines =<< trim END
+    vim9script
+    class A
+    endclass
+    class B
+    endclass
+    var x: object<any>
+    x = A.new()
+    assert_true(instanceof(x, A))
+    x = B.new()
+    assert_true(instanceof(x, B))
+    x = null_object
+    assert_true(instanceof(x, null_class))
+  END
+  v9.CheckSourceSuccess(lines)
+
+  # Use a list of object<any> variable
+  lines =<< trim END
+    vim9script
+    class A
+    endclass
+    class B
+    endclass
+    var l: list<object<any>>
+    l->add(A.new())
+    l->add(B.new())
+    assert_true(instanceof(l[0], A))
+    assert_true(instanceof(l[1], B))
+  END
+  v9.CheckSourceSuccess(lines)
+
+  # Using object<any> as a function argument type and the return type
+  lines =<< trim END
+    vim9script
+    class A
+    endclass
+    class B
+    endclass
+    def Fn(x: object<any>): object<any>
+      return x
+    enddef
+    assert_true(instanceof(Fn(A.new()), A))
+    assert_true(instanceof(Fn(B.new()), B))
+  END
+
+  # Try assigning a different type of value to a object<any> variable
+  lines =<< trim END
+    var x: object<any> = []
+  END
+  v9.CheckSourceDefAndScriptFailure(lines, ['E1012: Type mismatch; expected object<any> but got list<any>', 'E1012: Type mismatch; expected object<any> but got list<any>'])
+
+  # Try assigning a different type of value to a object<any> variable
+  lines =<< trim END
+    var x: object<any>
+    x = 0z10
+  END
+  v9.CheckSourceDefAndScriptFailure(lines, ['E1012: Type mismatch; expected object<any> but got blob', 'E1012: Type mismatch; expected object<any> but got blob'])
+
+  # Try adding a different type of value to a list<object<any>> variable
+  lines =<< trim END
+    var x: list<object<any>>
+    x->add({})
+  END
+  v9.CheckSourceDefAndScriptFailure(lines, ['E1012: Type mismatch; expected object<any> but got dict<any>', 'E1012: Type mismatch; expected object<any> but got dict<any>'])
+
+  # Try adding a different type of value to a dict<object<any>> variable
+  lines =<< trim END
+    var x: dict<object<any>>
+    x['a'] = {}
+  END
+  v9.CheckSourceDefAndScriptFailure(lines, ['E1012: Type mismatch; expected object<any> but got dict<any>', 'E1012: Type mismatch; expected object<any> but got dict<any>'])
+enddef
+
+" Test for object<{class}> type
+def Test_object_of_class_type()
+  var lines =<< trim END
+    vim9script
+    class A
+    endclass
+    var x: object<A>
+    x = A.new()
+    assert_true(instanceof(x, A))
+    var y: object<A> = A.new()
+    assert_true(instanceof(y, A))
+  END
+  v9.CheckSourceSuccess(lines)
+
+  lines =<< trim END
+    vim9script
+    class A
+    endclass
+    class B
+    endclass
+    var x: object<A>
+    x = B.new()
+  END
+  v9.CheckSourceFailure(lines, 'E1012: Type mismatch; expected object<A> but got object<B>')
+
+  lines =<< trim END
+    vim9script
+    class A
+    endclass
+    class B
+    endclass
+    def Fn(x: object<A>): object<B>
+      return B.new()
+    enddef
+    assert_true(instanceof(Fn(A.new()), B))
+  END
+  v9.CheckSourceSuccess(lines)
+
+  lines =<< trim END
+    var x: object
+  END
+  v9.CheckSourceDefAndScriptFailure(lines, ['E1008: Missing <type> after object', 'E1008: Missing <type> after object'])
+
+  lines =<< trim END
+    var x: object <any>
+  END
+  v9.CheckSourceDefAndScriptFailure(lines, ['E1068: No white space allowed before ''<'':  <any>', 'E1068: No white space allowed before ''<'':  <any>'])
+
+  lines =<< trim END
+    var x: object<any
+  END
+  v9.CheckSourceDefAndScriptFailure(lines, ['E1009: Missing > after type: <any', 'E1009: Missing > after type: <any'])
+
+  lines =<< trim END
+    var x: object<any,any>
+  END
+  v9.CheckSourceDefFailure(lines, 'E1009: Missing > after type: <any,any>')
+
+  lines =<< trim END
+    vim9script
+    var x: object<any,any>
+  END
+  v9.CheckSourceFailure(lines, 'E488: Trailing characters: ,any>')
+
+  lines =<< trim END
+    var x: object<number>
+  END
+  v9.CheckSourceDefAndScriptFailure(lines, [
+        \ 'E1353: Class name not found: <number>',
+        \ 'E1353: Class name not found: <number>'])
 enddef
 
 " vim: ts=8 sw=2 sts=2 expandtab tw=80 fdm=marker
