@@ -1012,9 +1012,10 @@ EXTERN win_T	*curwin;	// currently active window
 #define AUCMD_WIN_COUNT 5
 
 typedef struct {
-  win_T	*auc_win;	// Window used in aucmd_prepbuf().  When not NULL the
-			// window has been allocated.
-  int	auc_win_used;	// This auc_win is being used.
+    // Window used in aucmd_prepbuf().  When not NULL the window has been
+    // allocated.
+    win_T	*auc_win;
+    int		auc_win_used;	// This auc_win is being used.
 } aucmdwin_T;
 
 EXTERN aucmdwin_T aucmd_win[AUCMD_WIN_COUNT];
@@ -1054,6 +1055,10 @@ EXTERN tabpage_T    *first_tabpage;
 EXTERN tabpage_T    *curtab;
 EXTERN tabpage_T    *lastused_tabpage;
 EXTERN int	    redraw_tabline INIT(= FALSE);  // need to redraw tabline
+
+#if defined(FEAT_TABPANEL)
+EXTERN int	    redraw_tabpanel INIT(= FALSE);  // need to redraw tabpanel
+#endif
 
 /*
  * All buffers are linked in a list. 'firstbuf' points to the first entry,
