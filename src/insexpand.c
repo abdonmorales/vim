@@ -250,7 +250,7 @@ static void ins_compl_fixRedoBufForLeader(char_u *ptr_arg);
 static void ins_compl_add_list(list_T *list);
 static void ins_compl_add_dict(dict_T *dict);
 static int get_userdefined_compl_info(colnr_T curs_col, callback_T *cb, int *startcol);
-static void get_cpt_func_completion_matches(callback_T *cb);
+static void get_cpt_func_completion_matches(callback_T *cb, int restore_leader);
 static callback_T *get_callback_if_cpt_func(char_u *p);
 # endif
 static int setup_cpt_sources(void);
@@ -1404,7 +1404,7 @@ cp_compare_nearest(const void* a, const void* b)
 {
     int score_a = ((compl_T*)a)->cp_score;
     int score_b = ((compl_T*)b)->cp_score;
-    if (score_a < 0 || score_b < 0)
+    if (score_a == 0 || score_b == 0)
 	return 0;
     return (score_a > score_b) ? 1 : (score_a < score_b) ? -1 : 0;
 }
@@ -2378,7 +2378,7 @@ ins_compl_new_leader(void)
     if (compl_match_array == NULL)
 	compl_enter_selects = FALSE;
     else if (ins_compl_has_preinsert() && compl_leader.length > 0)
-	ins_compl_insert(FALSE, TRUE);
+	ins_compl_insert(TRUE);
 }
 
 /*
@@ -4807,20 +4807,6 @@ get_callback_if_cpt_func(char_u *p)
     }
     return NULL;
 }
-
-/*
- * Retrieve new completion matches by invoking callback "cb".
- */
-    static void
-expand_cpt_function(callback_T *cb)
-{
-    // Re-insert the text removed by ins_compl_delete().
-    ins_compl_insert_bytes(compl_orig_text.string + get_compl_len(), -1);
-    // Get matches
-    get_cpt_func_completion_matches(cb);
-    // Undo insertion
-    ins_compl_delete();
-}
 #endif
 
 /*
@@ -4984,7 +4970,7 @@ get_next_completion_match(int type, ins_compl_next_state_T *st, pos_T *ini)
 #ifdef FEAT_COMPL_FUNC
 	case CTRL_X_FUNCTION:
 	    if (ctrl_x_mode_normal())  // Invoked by a func in 'cpt' option
-		expand_cpt_function(st->func_cb);
+		get_cpt_func_completion_matches(st->func_cb, TRUE);
 	    else
 		expand_by_function(type, compl_pattern.string, NULL);
 	    break;
@@ -5235,6 +5221,12 @@ ins_compl_get_exp(pos_T *ini)
 
 	    compl_started = FALSE;
 	}
+
+	// For `^P` completion, reset `compl_curr_match` to the head to avoid
+	// mixing matches from different sources.
+	if (!compl_dir_forward())
+	    while (compl_curr_match->cp_prev)
+		compl_curr_match = compl_curr_match->cp_prev;
     }
     cpt_sources_index = -1;
     compl_started = TRUE;
@@ -5404,12 +5396,11 @@ ins_compl_expand_multiple(char_u *str)
 
 /*
  * Insert the new text being completed.
- * "in_compl_func" is TRUE when called from complete_check().
  * "move_cursor" is used when 'completeopt' includes "preinsert" and when TRUE
  * cursor needs to move back from the inserted text to the compl_leader.
  */
     void
-ins_compl_insert(int in_compl_func, int move_cursor)
+ins_compl_insert(int move_cursor)
 {
     int		compl_len = get_compl_len();
     int		preinsert = ins_compl_has_preinsert();
@@ -5442,8 +5433,6 @@ ins_compl_insert(int in_compl_func, int move_cursor)
 	set_vim_var_dict(VV_COMPLETED_ITEM, dict);
     }
 #endif
-    if (!in_compl_func)
-	compl_curr_match = compl_shown_match;
 }
 
 /*
@@ -5638,8 +5627,7 @@ ins_compl_next(
     int	    allow_get_expansion,
     int	    count,		// repeat completion this many times; should
 				// be at least 1
-    int	    insert_match,	// Insert the newly selected match
-    int	    in_compl_func)	// called from complete_check()
+    int	    insert_match)	// Insert the newly selected match
 {
     int	    num_matches = -1;
     int	    todo = count;
@@ -5700,7 +5688,7 @@ ins_compl_next(
     else if (insert_match)
     {
 	if (!compl_get_longest || compl_used_match)
-	    ins_compl_insert(in_compl_func, TRUE);
+	    ins_compl_insert(TRUE);
 	else
 	    ins_compl_insert_bytes(compl_leader.string + get_compl_len(), -1);
     }
@@ -5786,7 +5774,7 @@ ins_compl_check_keys(int frequency, int in_compl_func)
 	    c = safe_vgetc();	// Eat the character
 	    compl_shows_dir = ins_compl_key2dir(c);
 	    (void)ins_compl_next(FALSE, ins_compl_key2count(c),
-				      c != K_UP && c != K_DOWN, in_compl_func);
+				      c != K_UP && c != K_DOWN);
 	}
 	else
 	{
@@ -5809,7 +5797,7 @@ ins_compl_check_keys(int frequency, int in_compl_func)
 	int todo = compl_pending > 0 ? compl_pending : -compl_pending;
 
 	compl_pending = 0;
-	(void)ins_compl_next(FALSE, todo, TRUE, in_compl_func);
+	(void)ins_compl_next(FALSE, todo, TRUE);
     }
 }
 
@@ -6656,7 +6644,7 @@ ins_complete(int c, int enable_pum)
     // Find next match (and following matches).
     save_w_wrow = curwin->w_wrow;
     save_w_leftcol = curwin->w_leftcol;
-    n = ins_compl_next(TRUE, ins_compl_key2count(c), insert_match, FALSE);
+    n = ins_compl_next(TRUE, ins_compl_key2count(c), insert_match);
 
     // may undisplay the popup menu
     ins_compl_upd_pum();
@@ -6987,16 +6975,23 @@ remove_old_matches(void)
  */
 #ifdef FEAT_COMPL_FUNC
     static void
-get_cpt_func_completion_matches(callback_T *cb UNUSED)
+get_cpt_func_completion_matches(callback_T *cb UNUSED, int restore_leader)
 {
     int	startcol = cpt_sources_array[cpt_sources_index].cs_startcol;
+    int	result;
 
     VIM_CLEAR_STRING(cpt_compl_pattern);
 
     if (startcol == -2 || startcol == -3)
 	return;
 
-    if (set_compl_globals(startcol, curwin->w_cursor.col, TRUE) == OK)
+    if (restore_leader) // Re-insert the text removed by ins_compl_delete()
+	ins_compl_insert_bytes(compl_orig_text.string + get_compl_len(), -1);
+    result = set_compl_globals(startcol, curwin->w_cursor.col, TRUE);
+    if (restore_leader)
+	ins_compl_delete(); // Undo insertion
+
+    if (result == OK)
     {
 	expand_by_function(0, cpt_compl_pattern.string, cb);
 	cpt_sources_array[cpt_sources_index].cs_refresh_always =
@@ -7049,7 +7044,7 @@ cpt_compl_refresh(void)
 		}
 		cpt_sources_array[cpt_sources_index].cs_startcol = startcol;
 		if (ret == OK)
-		    get_cpt_func_completion_matches(cb);
+		    get_cpt_func_completion_matches(cb, FALSE);
 	    }
 	}
 
