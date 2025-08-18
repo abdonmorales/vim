@@ -1095,7 +1095,7 @@ focus_out_event(GtkWidget *widget UNUSED,
  * plus the NUL terminator.  Returns the length in bytes.
  *
  * event->string is evil; see here why:
- * http://developer.gnome.org/doc/API/2.0/gdk/gdk-Event-Structures.html#GdkEventKey
+ * https://www.manpagez.com/html/gdk2/gdk2-2.24.24/gdk2-Event-Structures.php#GdkEventKey
  */
     static int
 keyval_to_string(unsigned int keyval, char_u *string)
@@ -1730,15 +1730,6 @@ gui_mch_init_check(void)
 	res_registered = TRUE;
 	gui_gtk_register_resource();
     }
-#endif
-
-#if GTK_CHECK_VERSION(3,10,0)
-    // Vim currently assumes that Gtk means X11, so it cannot use native Gtk
-    // support for other backends such as Wayland.
-    //
-    // Use an environment variable to enable unfinished Wayland support.
-    if (getenv("GVIM_ENABLE_WAYLAND") == NULL)
-	gdk_set_allowed_backends ("x11");
 #endif
 
 #ifdef FEAT_GUI_GNOME
@@ -2704,6 +2695,10 @@ global_event_filter(GdkXEvent *xev,
     static void
 mainwin_realize(GtkWidget *widget UNUSED, gpointer data UNUSED)
 {
+#include "../runtime/vim16x16.xpm"
+#include "../runtime/vim32x32.xpm"
+#include "../runtime/vim48x48.xpm"
+
     GdkWindow * const mainwin_win = gtk_widget_get_window(gui.mainwin);
 
     // When started with "--echo-wid" argument, write window ID on stdout.
@@ -2718,10 +2713,32 @@ mainwin_realize(GtkWidget *widget UNUSED, gpointer data UNUSED)
 
     if (vim_strchr(p_go, GO_ICON) != NULL)
     {
-	/*
-	 * Add an icon to the main window. For fun and convenience of the user.
-	 */
-	gtk_window_set_icon_name(GTK_WINDOW(gui.mainwin), "gvim");
+	GtkIconTheme *icon_theme;
+
+	icon_theme = gtk_icon_theme_get_default();
+
+	if (icon_theme && gtk_icon_theme_has_icon(icon_theme, "gvim"))
+	{
+	    gtk_window_set_icon_name(GTK_WINDOW(gui.mainwin), "gvim");
+	}
+	else
+	{
+	    /*
+	     * Add an icon to the main window. For fun and convenience of the user.
+	     */
+	    GList *icons = NULL;
+
+	    icons = g_list_prepend(icons, gdk_pixbuf_new_from_xpm_data((const char **)vim16x16));
+	    icons = g_list_prepend(icons, gdk_pixbuf_new_from_xpm_data((const char **)vim32x32));
+	    icons = g_list_prepend(icons, gdk_pixbuf_new_from_xpm_data((const char **)vim48x48));
+
+	    gtk_window_set_icon_list(GTK_WINDOW(gui.mainwin), icons);
+
+	    // TODO: is this type cast OK?
+	    g_list_foreach(icons, (GFunc)(void *)&g_object_unref, NULL);
+	    g_list_free(icons);
+	}
+	g_object_unref(icon_theme);
     }
 
 #if !defined(USE_GNOME_SESSION)
@@ -5402,7 +5419,10 @@ gui_mch_free_font(GuiFont font)
  * monospace fonts as it's unlikely other fonts would be useful.
  */
     void
-gui_mch_expand_font(optexpand_T *args, void *param, int (*add_match)(char_u *val))
+gui_mch_expand_font(
+    optexpand_T	*args,
+    void	*param,
+    int		(*add_match)(char_u *val))
 {
     PangoFontFamily	**font_families = NULL;
     int			n_families = 0;

@@ -1647,4 +1647,36 @@ def Test_enum_echo()
   v9.CheckScriptSuccess(lines)
 enddef
 
+" Test for garbage collecting an enum with a complex member variables.
+func Test_class_selfref_gc()
+  let lines =<< trim END
+    vim9script
+    enum Foo
+      Red,
+      Blue
+      static var d = {a: [1, 2]}
+      static var l = [{a: 'a', b: 'b'}]
+    endenum
+    assert_equal(3, test_refcount(Foo))
+    test_garbagecollect_now()
+    assert_equal(3, test_refcount(Foo))
+  END
+  call v9.CheckSourceSuccess(lines)
+endfunc
+
+" Test for defining an enum in a function
+def Test_enum_defined_in_function()
+  var lines =<< trim END
+    vim9script
+    def Fn()
+      var x = 1
+      enum Foo
+        Red,
+      endenum
+    enddef
+    defcompile
+  END
+  v9.CheckScriptFailure(lines, 'E1435: Enum can only be used in a script', 2)
+enddef
+
 " vim: ts=8 sw=2 sts=2 expandtab tw=80 fdm=marker

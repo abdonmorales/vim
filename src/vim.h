@@ -24,7 +24,11 @@
 // ============ the header file puzzle: order matters =========
 
 #ifdef HAVE_CONFIG_H	// GNU autoconf (or something else) was here
-# include "auto/config.h"
+# ifdef VMS
+#  include "config.h"   /* Rely on /INCLUDE to find it. */
+# else
+#  include "auto/config.h"
+# endif /* def VMS [else] */
 # define HAVE_PATHDEF
 
 /*
@@ -522,6 +526,7 @@ typedef long long vimlong_T;
 
 // for offsetof()
 #include <stddef.h>
+#include <stdbool.h>
 
 #if defined(HAVE_SYS_SELECT_H) && \
 	(!defined(HAVE_SYS_TIME_H) || defined(SYS_SELECT_WITH_SYS_TIME))
@@ -897,6 +902,7 @@ extern int (*dyn_libintl_wputenv)(const wchar_t *envstring);
 #define BUF_DIFF_FILTER		    0x2000
 #define WILD_KEEP_SOLE_ITEM	    0x4000
 #define WILD_MAY_EXPAND_PATTERN	    0x8000
+#define WILD_FUNC_TRIGGER	    0x10000 // called from wildtrigger()
 
 // Flags for expand_wildcards()
 #define EW_DIR		0x01	// include directory names
@@ -3030,8 +3036,9 @@ long elapsed(DWORD start_tick);
 #define EVAL_VAR_IMPORT		4   // may return special variable for import
 #define EVAL_VAR_NO_FUNC	8   // do not look for a function
 
-// Maximum number of characters that can be fuzzy matched
-#define MAX_FUZZY_MATCHES	256
+// Fuzzy matching
+#define FUZZY_MATCH_MAX_LEN	1024    // max characters that can be matched
+#define FUZZY_SCORE_NONE	INT_MIN // invalid fuzzy score
 
 // flags for equal_type()
 #define ETYPE_ARG_UNKNOWN 1
