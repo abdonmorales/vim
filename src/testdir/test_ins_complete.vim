@@ -5460,6 +5460,66 @@ func Test_omni_start_invalid_col()
   set omnifunc& complete&
 endfunc
 
+func Test_completetimeout_autocompletetimeout()
+  func OmniFunc(findstart, base)
+    if a:findstart
+      return 1
+    else
+      return ['fooOmni']
+    endif
+  endfunc
+
+  set omnifunc=OmniFunc
+  call test_override("char_avail", 1)
+  inoremap <F2> <Cmd>let b:matches = complete_info(["matches"]).matches<CR>
+
+  call setline(1, ['foobar', 'foobarbaz'])
+  new
+  call setline(1, ['foo', 'foobaz', ''])
+  set complete=.,o,w
+  call feedkeys("G", 'xt!')
+
+  set autocomplete
+  for tt in [1, 80, 1000, -1, 0]
+    exec $'set autocompletetimeout={tt}'
+    call feedkeys("\<Esc>Sf\<F2>\<Esc>0", 'xt!')
+    call assert_equal(['foobaz', 'foo', 'fooOmni', 'foobar', 'foobarbaz'], b:matches->mapnew('v:val.word'))
+  endfor
+  set autocomplete&
+
+  for tt in [80, 1000, -1, 0]
+    exec $'set completetimeout={tt}'
+    call feedkeys("\<Esc>Sf\<C-N>\<F2>\<Esc>0", 'xt!')
+    call assert_equal(['foo', 'foobaz', 'fooOmni', 'foobar', 'foobarbaz'], b:matches->mapnew('v:val.word'))
+  endfor
+
+  " Clock does not have fine granularity, so checking 'elapsed time' is only
+  " approximate. We can only test that some type of timeout is enforced.
+  call setline(1, map(range(60000), '"foo" . v:val'))
+  set completetimeout=1
+  call feedkeys("Gof\<C-N>\<F2>\<Esc>0", 'xt!')
+  let match_count = len(b:matches->mapnew('v:val.word'))
+  call assert_true(match_count < 2000)
+
+  set completetimeout=1000
+  call feedkeys("\<Esc>Sf\<C-N>\<F2>\<Esc>0", 'xt!')
+  let match_count = len(b:matches->mapnew('v:val.word'))
+  call assert_true(match_count > 2000)
+
+  set autocomplete
+  set autocompletetimeout=81
+  call feedkeys("\<Esc>Sf\<F2>\<Esc>0", 'xt!')
+  let match_count = len(b:matches->mapnew('v:val.word'))
+  call assert_true(match_count < 50000)
+
+  set complete& omnifunc& autocomplete& autocompletetimeout& completetimeout&
+  bwipe!
+  %d
+  call test_override("char_avail", 0)
+  iunmap <F2>
+  delfunc OmniFunc
+endfunc
+
 func Test_autocompletedelay()
   CheckScreendump
 
@@ -5489,6 +5549,22 @@ func Test_autocompletedelay()
   call term_sendkeys(buf, "\<Esc>:set completeopt=menuone,preinsert\<CR>")
   call term_sendkeys(buf, "Sf\<C-N>")
   call VerifyScreenDump(buf, 'Test_autocompletedelay_7', {})
+
+  " After the menu is open, ^N/^P and Up/Down should not delay
+  call term_sendkeys(buf, "\<Esc>:set completeopt=menu noruler\<CR>")
+  call term_sendkeys(buf, "\<Esc>Sf")
+  sleep 500ms
+  call term_sendkeys(buf, "\<C-N>")
+  call VerifyScreenDump(buf, 'Test_autocompletedelay_8', {})
+  call term_sendkeys(buf, "\<Down>")
+  call VerifyScreenDump(buf, 'Test_autocompletedelay_9', {})
+
+  " When menu is not open Up/Down moves cursor to different line
+  call term_sendkeys(buf, "\<Esc>Sf")
+  call term_sendkeys(buf, "\<Up>")
+  call VerifyScreenDump(buf, 'Test_autocompletedelay_10', {})
+  call term_sendkeys(buf, "\<Down>")
+  call VerifyScreenDump(buf, 'Test_autocompletedelay_11', {})
 
   call term_sendkeys(buf, "\<esc>")
   call StopVimInTerminal(buf)
