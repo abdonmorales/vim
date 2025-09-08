@@ -40,6 +40,22 @@
 #  error configure did not run properly.  Check auto/config.log.
 # endif
 
+/*
+ * NeXTSTEP / OPENSTEP support deprecation
+ *
+ * NeXT hardware was discontinued in 1993, and the last OPENSTEP release
+ * (4.2) shipped in 1996–1997. No known users remain today.
+ *
+ * To simplify maintenance, NeXT support is formally deprecated. If you hit
+ * this error, please report it to the Vim maintainers.
+ *
+ * This guard will be removed once the remaining NeXT-specific code paths
+ * are deleted in a future release.
+ */
+#if defined(NeXT) || defined(__NeXT__)
+# error "NeXTSTEP / OPENSTEP support has been deprecated."
+#endif
+
 # if (defined(__linux__) && !defined(__ANDROID__)) || defined(__CYGWIN__) || defined(__GNU__)
 // Needed for strptime().  Needs to be done early, since header files can
 // include other header files and end up including time.h, where these symbols
@@ -2240,7 +2256,8 @@ typedef int sock_T;
 #define VV_WAYLAND_DISPLAY 112
 #define VV_CLIPMETHOD 113
 #define VV_TERMDA1 114
-#define VV_LEN		115	// number of v: vars
+#define VV_TERMOSC 115
+#define VV_LEN		116	// number of v: vars
 
 // used for v_number in VAR_BOOL and VAR_SPECIAL
 #define VVAL_FALSE	0L	// VAR_BOOL
@@ -2300,6 +2317,8 @@ typedef enum {
     CLIPMETHOD_NONE,
     CLIPMETHOD_WAYLAND,
     CLIPMETHOD_X11,
+    CLIPMETHOD_GUI,
+    CLIPMETHOD_OTHER,
 } clipmethod_T;
 
 // Info about selected text

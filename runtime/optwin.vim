@@ -1,7 +1,7 @@
 " These commands create the option window.
 "
 " Maintainer:	The Vim Project <https://github.com/vim/vim>
-" Last Change:	2025 Aug 23
+" Last Change:	2025 Sep 02
 " Former Maintainer:	Bram Moolenaar <Bram@vim.org>
 
 " If there already is an option window, jump to that one.
@@ -632,7 +632,8 @@ if has("win32")
   call <SID>AddOption("restorescreen", gettext("restore the screen contents when exiting Vim"))
   call <SID>BinOptionG("rs", &rs)
 endif
-
+call <SID>AddOption("osctimeoutlen", gettext("timeout used for terminal OSC responses"))
+call <SID>OptionG("ost", &ost)
 
 call <SID>Header(gettext("using the mouse"))
 call <SID>AddOption("mouse", gettext("list of flags for using the mouse"))
