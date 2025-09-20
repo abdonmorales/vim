@@ -189,6 +189,7 @@ def s:GetFilenameChecks(): dict<list<string>>
     cmusrc: ['any/.cmus/autosave', 'any/.cmus/rc', 'any/.cmus/command-history', 'any/.cmus/file.theme', 'any/cmus/rc', 'any/cmus/file.theme', '/.cmus/autosave', '/.cmus/command-history', '/.cmus/file.theme', '/.cmus/rc', '/cmus/file.theme', '/cmus/rc'],
     cobol: ['file.cbl', 'file.cob'],
     coco: ['file.atg'],
+    codeowners: ['CODEOWNERS'],
     conaryrecipe: ['file.recipe'],
     conf: ['auto.master', 'file.conf', 'texdoc.cnf', '.x11vncrc', '.chktexrc', '.ripgreprc', 'ripgreprc', 'file.ctags'],
     config: ['/etc/hostname.file', 'any/etc/hostname.file', 'configure.in', 'configure.ac', 'file.at', 'aclocal.m4'],
@@ -422,6 +423,7 @@ def s:GetFilenameChecks(): dict<list<string>>
     karel: ['file.kl', 'file.KL'],
     kconfig: ['Kconfig', 'Kconfig.debug', 'Kconfig.file', 'Config.in', 'Config.in.host'],
     kdl: ['file.kdl'],
+    kitty: ['kitty.conf', '~/.config/kitty/colorscheme.conf'],
     kivy: ['file.kv'],
     kix: ['file.kix'],
     kotlin: ['file.kt', 'file.ktm', 'file.kts'],
@@ -454,6 +456,7 @@ def s:GetFilenameChecks(): dict<list<string>>
     lite: ['file.lite', 'file.lt'],
     litestep: ['/LiteStep/any/file.rc', 'any/LiteStep/any/file.rc'],
     livebook: ['file.livemd'],
+#    log: ['file.log', 'file_log', 'file.LOG', 'file_LOG'],
     logcheck: ['/etc/logcheck/file.d-some/file', '/etc/logcheck/file.d/file', 'any/etc/logcheck/file.d-some/file', 'any/etc/logcheck/file.d/file'],
     loginaccess: ['/etc/login.access', 'any/etc/login.access'],
     logindefs: ['/etc/login.defs', 'any/etc/login.defs'],
@@ -932,7 +935,7 @@ def s:GetFilenameChecks(): dict<list<string>>
     xslt: ['file.xsl', 'file.xslt'],
     yacc: ['file.yy', 'file.yxx', 'file.y++'],
     yaml: ['file.yaml', 'file.yml', 'file.eyaml', 'file.kyaml', 'file.kyml', 'any/.bundle/config', '.clangd', '.clang-format', '.clang-tidy', 'file.mplstyle', 'matplotlibrc', 'yarn.lock',
-           '/home/user/.kube/config', '/home/user/.kube/kuberc', '.condarc', 'condarc', 'pixi.lock'],
+           '/home/user/.kube/config', '/home/user/.kube/kuberc', '.condarc', 'condarc', '.mambarc', 'mambarc', 'pixi.lock'],
     yang: ['file.yang'],
     yuck: ['file.yuck'],
     z8a: ['file.z8a'],
@@ -1708,6 +1711,7 @@ endfunc
 
 func Test_haredoc_file()
   filetype on
+
   call assert_true(mkdir('foo/bar', 'pR'))
 
   call writefile([], 'README', 'D')
@@ -1715,28 +1719,37 @@ func Test_haredoc_file()
   call assert_notequal('haredoc', &filetype)
   bwipe!
 
+  let g:filetype_haredoc = 3
+  call writefile([], 'foo/bar/bar.ha', 'D')
+  split README
+  call assert_equal('haredoc', &filetype)
+  bwipe!
+
+  let g:filetype_haredoc = 2
+  split README
+  call assert_notequal('haredoc', &filetype)
+  bwipe!
+
+  call writefile([], 'foo/foo.ha', 'D')
+  split README
+  call assert_equal('haredoc', &filetype)
+  bwipe!
+
   let g:filetype_haredoc = 1
   split README
   call assert_notequal('haredoc', &filetype)
   bwipe!
 
-  call writefile([], 'foo/quux.ha')
+  call writefile([], 'main.ha', 'D')
   split README
   call assert_equal('haredoc', &filetype)
   bwipe!
-  call delete('foo/quux.ha')
 
-  call writefile([], 'foo/bar/baz.ha', 'D')
+  let g:filetype_haredoc = 0
   split README
   call assert_notequal('haredoc', &filetype)
   bwipe!
-
-  let g:haredoc_search_depth = 2
-  split README
-  call assert_equal('haredoc', &filetype)
-  bwipe!
   unlet g:filetype_haredoc
-  unlet g:haredoc_search_depth
 
   filetype off
 endfunc

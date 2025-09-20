@@ -5023,7 +5023,7 @@ func Test_nonkeyword_trigger()
   call assert_equal('a#', getline('.'))
   set completeopt&
 
-  " Test 2: Filter nonkeyword and keyword matches with differet startpos
+  " Test 2: Filter nonkeyword and keyword matches with different startpos
   set completeopt+=menuone,noselect
   call feedkeys("S#a\<C-N>b\<F2>\<F3>\<Esc>0", 'tx!')
   call assert_equal(['abc', 'abcd', '#abar'], b:matches->mapnew('v:val.word'))
@@ -5144,7 +5144,7 @@ func Test_autocomplete_trigger()
   call assert_equal(2, g:CallCount)
   call assert_equal('a#', getline('.'))
 
-  " Test 2: Filter nonkeyword and keyword matches with differet startpos
+  " Test 2: Filter nonkeyword and keyword matches with different startpos
   for fuzzy in range(2)
     if fuzzy
       set completeopt+=fuzzy
@@ -5246,6 +5246,28 @@ func Test_autocomplete_trigger()
   call assert_equal([], b:matches->mapnew('v:val.word'))
   call feedkeys("Sazx\<Left>\<BS>\<F2>\<Esc>0", 'tx!')
   call assert_equal(['and', 'afoo'], b:matches->mapnew('v:val.word'))
+
+  " Test 6: <BS> should clear the selected item (PR #18265)
+  %d
+  call setline(1, ["foobarfoo", "foobar", "foobarbaz"])
+  call feedkeys("Gofo\<C-N>\<C-N>\<F2>\<F3>\<Esc>0", 'tx!')
+  call assert_equal(['foobarbaz', 'foobar', 'foobarfoo'], b:matches->mapnew('v:val.word'))
+  call assert_equal(1, b:selected)
+  call feedkeys("Sfo\<C-N>\<C-N>\<BS>\<F2>\<F3>\<Esc>0", 'tx!')
+  call assert_equal(['foobarbaz', 'foobar', 'foobarfoo'], b:matches->mapnew('v:val.word'))
+  call assert_equal(-1, b:selected)
+  call assert_equal('fooba', getline(4))
+  call feedkeys("Sfo\<C-N>\<C-N>\<BS>\<C-N>\<F2>\<F3>\<Esc>0", 'tx!')
+  call assert_equal(['foobarbaz', 'foobar', 'foobarfoo'], b:matches->mapnew('v:val.word'))
+  call assert_equal(0, b:selected)
+  call assert_equal('foobarbaz', getline(4))
+
+  " Test 7: Remove selection when menu contents change (PR #18265)
+  %d
+  call setline(1, ["foobar", "fodxyz", "fodabc"])
+  call feedkeys("Gofoo\<C-N>\<BS>\<BS>\<BS>\<BS>d\<F2>\<F3>\<Esc>0", 'tx!')
+  call assert_equal(['fodabc', 'fodxyz'], b:matches->mapnew('v:val.word'))
+  call assert_equal(-1, b:selected)
 
   bw!
   call test_override("char_avail", 0)
@@ -5359,7 +5381,7 @@ func Test_autocomplete_timer()
   call assert_equal(-1, b:selected)
 
   " Test 7: Following 'cot' option values have no effect
-  set completeopt=menu,menuone,noselect,noinsert,longest,preinsert
+  set completeopt=menu,menuone,noselect,noinsert,longest
   set complete=.,Ffunction('TestComplete'\\,\ [0\\,\ 0\\,\ 0])
   let g:CallCount = 0
   call feedkeys("Sab\<c-n>\<F2>\<F3>\<Esc>0", 'tx!')
@@ -5573,6 +5595,158 @@ func Test_autocompletedelay()
   call VerifyScreenDump(buf, 'Test_autocompletedelay_10', {})
   call term_sendkeys(buf, "\<Down>")
   call VerifyScreenDump(buf, 'Test_autocompletedelay_11', {})
+
+  call term_sendkeys(buf, "\<esc>")
+  call StopVimInTerminal(buf)
+endfunc
+
+func Test_autocomplete_completeopt_preinsert()
+  func GetLine()
+    let g:line = getline('.')
+    let g:col = col('.')
+  endfunc
+
+  call test_override("char_avail", 1)
+  new
+  inoremap <buffer><F5> <C-R>=GetLine()<CR>
+  set completeopt=preinsert autocomplete
+  call setline(1, ["foobar", "foozbar"])
+  call feedkeys("Go\<ESC>", 'tx')
+
+  func DoTest(typed, line, col)
+    call feedkeys($"S{a:typed}\<F5>\<ESC>", 'tx')
+    call assert_equal(a:line, g:line)
+    call assert_equal(a:col, g:col)
+  endfunc
+
+  call DoTest("f", 'foo', 2)
+  call DoTest("fo", 'foo', 3)
+  call DoTest("foo", 'foo', 4)
+  call DoTest("foob", 'foobar', 5)
+  call DoTest("foob\<BS>", 'foo', 4)
+  call DoTest("foob\<BS>\<BS>", 'foo', 3)
+  call DoTest("foo\<BS>", 'foo', 3)
+  call DoTest("foo\<BS>\<BS>", 'foo', 2)
+  call DoTest("foo\<BS>\<BS>\<BS>", '', 1)
+
+  call DoTest("foo \<BS>", 'foo', 4)
+  call DoTest("foo \<BS>\<BS>", 'foo', 3)
+
+  call DoTest("f\<C-N>", 'foozbar', 8)
+  call DoTest("f\<C-N>\<C-N>", 'foobar', 7)
+  call DoTest("f\<C-N>\<C-N>\<C-N>", 'foo', 2)
+  call DoTest("f\<C-N>\<C-N>\<C-N>\<C-N>", 'foozbar', 8)
+  call DoTest("f\<C-N>\<C-N>\<C-N>\<C-N>\<C-P>", 'foo', 2)
+  call DoTest("f\<C-N>\<C-N>\<C-N>\<C-N>\<C-P>\<C-P>", 'foobar', 7)
+  call DoTest("f\<C-P>", 'foobar', 7)
+  call DoTest("fo\<BS>\<C-P>", 'foobar', 7)
+
+  call DoTest("zar\<C-O>0f", 'foozar', 2)
+  call DoTest("zar\<C-O>0f\<C-Y>", 'foozar', 4)
+  call DoTest("zar\<C-O>0f\<C-Y>\<BS>", 'foozar', 3)
+
+  call DoTest("zar\<C-O>0f\<C-N>", 'foozbarzar', 8)
+  call DoTest("zar\<C-O>0f\<C-N>\<C-N>", 'foobarzar', 7)
+  call DoTest("zar\<C-O>0f\<C-N>\<C-N>\<C-N>", 'foozar', 2)
+  call DoTest("zar\<C-O>0f\<C-N>\<C-N>\<C-N>\<C-N>", 'foozbarzar', 8)
+  call DoTest("zar\<C-O>0f\<C-N>\<C-N>\<C-N>\<C-N>\<C-P>", 'foozar', 2)
+  call DoTest("zar\<C-O>0f\<C-N>\<C-N>\<C-N>\<C-N>\<C-P>\<C-P>", 'foobarzar', 7)
+  call DoTest("zar\<C-O>0f\<C-P>", 'foobarzar', 7)
+
+  " Should not work with fuzzy
+  set cot+=fuzzy
+  call DoTest("f", 'f', 2)
+  set cot-=fuzzy
+
+  " leader should match prefix of inserted word
+  %delete
+  set smartcase ignorecase
+  call setline(1, ["FOO"])
+  call feedkeys($"Gof\<F5>\<Esc>", 'tx')
+  call assert_equal('f', g:line)
+  call feedkeys($"SF\<F5>\<Esc>", 'tx')
+  call assert_equal('FOO', g:line)
+  set smartcase& ignorecase&
+
+  " Verify that redo (dot) works
+  %delete
+  call setline(1, ["foobar", "foozbar", "foobaz", "changed", "change"])
+  call feedkeys($"/foo\<CR>", 'tx')
+  call feedkeys($"cwch\<C-N>\<Esc>n.n.", 'tx')
+  call assert_equal(repeat(['changed'], 3), getline(1, 3))
+
+  " Select a match and delete up to text equal to another match
+  %delete
+  call setline(1, ["foobar", "foo"])
+  call feedkeys("Go\<ESC>", 'tx')
+  call DoTest("f\<C-N>\<C-N>\<BS>\<BS>\<BS>\<BS>", 'foo', 3)
+
+  %delete _
+  let &l:undolevels = &l:undolevels
+  normal! ifoo
+  let &l:undolevels = &l:undolevels
+  normal! ofoobar
+  let &l:undolevels = &l:undolevels
+  normal! ofoobaz
+  let &l:undolevels = &l:undolevels
+
+  func CheckUndo()
+    let g:errmsg = ''
+    call assert_equal(['foo', 'foobar', 'foobaz'], getline(1, '$'))
+    undo
+    call assert_equal(['foo', 'foobar'], getline(1, '$'))
+    undo
+    call assert_equal(['foo'], getline(1, '$'))
+    undo
+    call assert_equal([''], getline(1, '$'))
+    later 3
+    call assert_equal(['foo', 'foobar', 'foobaz'], getline(1, '$'))
+    call assert_equal('', v:errmsg)
+  endfunc
+
+  " Check that switching buffer with "preinsert" doesn't corrupt undo.
+  new
+  setlocal bufhidden=wipe
+  inoremap <buffer> <F2> <Cmd>enew!<CR>
+  call feedkeys("if\<F2>\<Esc>", 'tx')
+  bwipe!
+  call CheckUndo()
+
+  " Check that closing window with "preinsert" doesn't corrupt undo.
+  new
+  setlocal bufhidden=wipe
+  inoremap <buffer> <F2> <Cmd>close!<CR>
+  call feedkeys("if\<F2>\<Esc>", 'tx')
+  call CheckUndo()
+
+  %delete _
+  delfunc CheckUndo
+
+  bw!
+  set cot& autocomplete&
+  delfunc GetLine
+  delfunc DoTest
+  call test_override("char_avail", 0)
+endfunc
+
+" Issue #18326
+func Test_fuzzy_select_item_when_acl()
+  CheckScreendump
+  let lines =<< trim [SCRIPT]
+    call setline(1, ["v", "vi", "vim"])
+    set autocomplete completeopt=menuone,noinsert,fuzzy autocompletedelay=300
+  [SCRIPT]
+  call writefile(lines, 'XTest_autocomplete_delay', 'D')
+  let buf = RunVimInTerminal('-S XTest_autocomplete_delay', {'rows': 10})
+
+  call term_sendkeys(buf, "Govi")
+  call VerifyScreenDump(buf, 'Test_fuzzy_autocompletedelay_1', {})
+
+  call term_sendkeys(buf, "\<Esc>Sv")
+  call VerifyScreenDump(buf, 'Test_fuzzy_autocompletedelay_2', {})
+  sleep 500m
+  call term_sendkeys(buf, "i")
+  call VerifyScreenDump(buf, 'Test_fuzzy_autocompletedelay_3', {})
 
   call term_sendkeys(buf, "\<esc>")
   call StopVimInTerminal(buf)
