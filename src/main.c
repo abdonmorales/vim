@@ -682,15 +682,18 @@ vim_main2(void)
     if (!gui.in_use)
 # endif
     {
-	if (wayland_init_client(wayland_display_name) == OK)
+	sprintf(wayland_vim_special_mime, "application/x-vim-instance-%ld",
+		mch_get_pid());
+
+	if (wayland_init_connection(wayland_display_name) == OK)
 	{
 	    TIME_MSG("connected to Wayland display");
 
 # ifdef FEAT_WAYLAND_CLIPBOARD
-	    if (wayland_cb_init((char*)p_wse) == OK)
+	    if (clip_init_wayland() == OK)
 		TIME_MSG("setup Wayland clipboard");
-	}
 # endif
+	}
     }
 #endif
 
@@ -1125,7 +1128,7 @@ is_not_a_term_or_gui(void)
 	;
 }
 
-#if defined(EXITFREE) || defined(PROTO)
+#if defined(EXITFREE)
     void
 free_vbuf(void)
 {
@@ -1140,7 +1143,7 @@ free_vbuf(void)
 }
 #endif
 
-#if defined(FEAT_GUI) || defined(PROTO)
+#if defined(FEAT_GUI)
 /*
  * If a --gui-dialog-file argument was given return the file name.
  * Otherwise return NULL.
@@ -1223,7 +1226,7 @@ state_no_longer_safe(char *reason UNUSED)
     was_safe = FALSE;
 }
 
-#if defined(FEAT_EVAL) || defined(MESSAGE_QUEUE) || defined(PROTO)
+#if defined(FEAT_EVAL) || defined(MESSAGE_QUEUE)
     int
 get_was_safe_state(void)
 {
@@ -1231,7 +1234,7 @@ get_was_safe_state(void)
 }
 #endif
 
-#if defined(MESSAGE_QUEUE) || defined(PROTO)
+#if defined(MESSAGE_QUEUE)
 /*
  * Invoked when leaving code that invokes callbacks.  Then trigger
  * SafeStateAgain, if it was safe when starting to wait for a character.
@@ -1639,7 +1642,7 @@ theend:
 }
 
 
-#if defined(USE_XSMP) || defined(FEAT_GUI) || defined(PROTO)
+#if defined(USE_XSMP) || defined(FEAT_GUI)
 /*
  * Exit, but leave behind swap files for modified buffers.
  */

@@ -341,7 +341,7 @@
  * +syntax		syntax highlighting.  When using this, it's a good
  *			idea to have +eval too.
  */
-#if defined(FEAT_NORMAL) || defined(PROTO)
+#if defined(FEAT_NORMAL)
 # define FEAT_SYN_HL
 #endif
 
@@ -356,14 +356,14 @@
 /*
  * +spell		spell checking
  */
-#if (defined(FEAT_NORMAL) || defined(PROTO))
+#if defined(FEAT_NORMAL)
 # define FEAT_SPELL
 #endif
 
 /*
  * +cryptv		Encryption (originally by Mohsin Ahmed <mosh@sasi.com>).
  */
-#if defined(FEAT_NORMAL) && !defined(FEAT_CRYPT) || defined(PROTO)
+#if defined(FEAT_NORMAL) && !defined(FEAT_CRYPT)
 # define FEAT_CRYPT
 #endif
 
@@ -905,6 +905,19 @@
 # define FEAT_CLIPBOARD
 #endif
 
+/*
+ * +clipboard_provider	Allow Vim to use clipboard providers
+ */
+#if defined(FEAT_CLIPBOARD_PROVIDER)
+# ifndef FEAT_EVAL
+#  undef FEAT_CLIPBOARD_PROVIDER
+# else
+#  ifndef FEAT_CLIPBOARD
+#   define FEAT_CLIPBOARD
+#  endif
+# endif
+#endif
+
 #ifdef FEAT_GUI
 # ifndef FEAT_CLIPBOARD
 #  define FEAT_CLIPBOARD
@@ -926,6 +939,13 @@
 # ifndef FEAT_CLIPBOARD
 #  define FEAT_CLIPBOARD
 # endif
+#endif
+
+/*
+ * +wayland_focus_steal	    Focus stealing support for Wayland clipboard
+ */
+#if !defined(FEAT_WAYLAND_CLIPBOARD) && defined(FEAT_WAYLAND_CLIPBOARD_FS)
+# undef FEAT_WAYLAND_CLIPBOARD_FS
 #endif
 
 /*

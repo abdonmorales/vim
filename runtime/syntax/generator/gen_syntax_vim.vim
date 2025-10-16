@@ -1,7 +1,7 @@
 " Vim syntax file generator
 " Language:		 Vim script
 " Maintainer:  Hirohito Higashi (h_east)
-" Last Change: 2025 Aug 27
+" Last Change: 2025 Oct 11
 
 let s:keepcpo= &cpo
 set cpo&vim
@@ -303,10 +303,15 @@ function s:get_vim_command_type(cmd_name)
 		augroup
 		autocmd
 		behave
+		browse
 		call
 		catch
 		chdir
+		change
 		class
+		command
+		confirm
+		const
 		copy
 		debuggreedy
 		def
@@ -343,6 +348,7 @@ function s:get_vim_command_type(cmd_name)
 		grep
 		grepadd
 		helpgrep
+		highlight
 		if
 		import
 		interface
@@ -352,6 +358,8 @@ function s:get_vim_command_type(cmd_name)
 		let
 		loadkeymap
 		lhelpgrep
+		lgrep
+		lgrepadd
 		lvimgrep
 		lvimgrepadd
 		make
@@ -362,6 +370,7 @@ function s:get_vim_command_type(cmd_name)
 		mapclear
 		mark
 		match
+		menutranslate
 		mzscheme
 		mzfile
 		noremap
@@ -386,6 +395,9 @@ function s:get_vim_command_type(cmd_name)
 		pyxfile
 		redir
 		return
+		ruby
+		rubydo
+		rubyfile
 		set
 		setglobal
 		setlocal
@@ -398,20 +410,24 @@ function s:get_vim_command_type(cmd_name)
 		substitute
 		swapname
 		syntax
+		syntime
 		tcl
 		tcldo
 		tclfile
+		terminal
 		this
 		throw
 		type
 		uniq
 		unlet
+		unlockvar
 		unmap
 		var
 		vim9script
 		vimgrep
 		vimgrepadd
 		while
+		wincmd
 	EOL
 	" Required for original behavior
 	" \	'global', 'vglobal'

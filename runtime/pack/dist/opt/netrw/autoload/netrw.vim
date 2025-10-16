@@ -8,6 +8,8 @@
 " 2025 Sep 05 by Vim Project ensure netrw#fs#Dirname() returns trailing slash #18199
 " 2025 Sep 11 by Vim Project only keep cursor position in tree mode #18275
 " 2025 Sep 17 by Vim Project tighten the regex to handle remote compressed archives #18318
+" 2025 Sep 18 by Vim Project 'equalalways' not always respected #18358
+" 2025 Oct 01 by Vim Project fix navigate to parent folder #18464
 " Copyright:  Copyright (C) 2016 Charles E. Campbell {{{1
 "             Permission is hereby granted to use and distribute this code,
 "             with or without modifications, provided that this copyright
@@ -3838,6 +3840,8 @@ function s:NetrwBrowseChgDir(islocal, newdir, cursor, ...)
                     exe "keepalt ".(g:netrw_alto? "bel " : "abo ").winsz."wincmd s"
                     if !&ea
                         keepalt wincmd _
+                    else
+                        exe "keepalt wincmd ="
                     endif
                     call s:SetRexDir(a:islocal,curdir)
 
@@ -3847,6 +3851,8 @@ function s:NetrwBrowseChgDir(islocal, newdir, cursor, ...)
                     exe "keepalt ".(g:netrw_alto? "top " : "bot ")."vert ".winsz."wincmd s"
                     if !&ea
                         keepalt wincmd |
+                    else
+                        exe "keepalt wincmd ="
                     endif
                     call s:SetRexDir(a:islocal,curdir)
 
@@ -3945,7 +3951,8 @@ function s:NetrwBrowseChgDir(islocal, newdir, cursor, ...)
         " NetrwBrowseChgDir: go up one directory {{{3
         " --------------------------------------
 
-        let dirname = netrw#fs#Dirname(dirname)
+        " The following regexps expect '/' as path separator
+        let dirname = substitute(netrw#fs#AbsPath(dirname), '\\', '/', 'ge') . '/'
 
         if w:netrw_liststyle == s:TREELIST && exists("w:netrw_treedict")
             " force a refresh
@@ -7016,6 +7023,9 @@ function s:NetrwSplit(mode)
         NetrwKeepj call s:RestoreWinVars()
         NetrwKeepj call netrw#LocalBrowseCheck(s:NetrwBrowseChgDir(1,s:NetrwGetWord(),1))
         unlet s:didsplit
+        if &ea
+            exe "keepalt wincmd ="
+        endif
 
     elseif a:mode == 4
         " local and t
@@ -7053,6 +7063,9 @@ function s:NetrwSplit(mode)
         NetrwKeepj call s:RestoreWinVars()
         NetrwKeepj call netrw#LocalBrowseCheck(s:NetrwBrowseChgDir(1,s:NetrwGetWord(),1))
         unlet s:didsplit
+        if &ea
+            exe "keepalt wincmd ="
+        endif
 
     else
         call netrw#msg#Notify('ERROR', '(NetrwSplit) unsupported mode='.a:mode)

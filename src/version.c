@@ -28,8 +28,8 @@
 char		*Version = VIM_VERSION_SHORT;
 static char	*mediumVersion = VIM_VERSION_MEDIUM;
 
-#if defined(HAVE_DATE_TIME) || defined(PROTO)
-# if (defined(VMS) && defined(VAXC)) || defined(PROTO)
+#if defined(HAVE_DATE_TIME)
+# if defined(VMS) && defined(VAXC)
 char	longVersion[sizeof(VIM_VERSION_LONG_DATE) + sizeof(__DATE__)
 						      + sizeof(__TIME__) + 3];
 
@@ -155,6 +155,11 @@ static char *(features[]) =
 	"+clipboard",
 #else
 	"-clipboard",
+#endif
+#ifdef FEAT_CLIPBOARD_PROVIDER
+	"+clipboard_provider",
+#else
+	"-clipboard_provider",
 #endif
 	"+cmdline_compl",
 	"+cmdline_hist",
@@ -659,6 +664,11 @@ static char *(features[]) =
 #else
 	"-wayland_clipboard",
 #endif
+#ifdef FEAT_WAYLAND_CLIPBOARD_FS
+	"+wayland_focus_steal",
+#else
+	"-wayland_focus_steal",
+#endif
 	"+wildignore",
 	"+wildmenu",
 	"+windows",
@@ -724,6 +734,170 @@ static char *(features[]) =
 
 static int included_patches[] =
 {   /* Add new patch number below this line */
+/**/
+    1857,
+/**/
+    1856,
+/**/
+    1855,
+/**/
+    1854,
+/**/
+    1853,
+/**/
+    1852,
+/**/
+    1851,
+/**/
+    1850,
+/**/
+    1849,
+/**/
+    1848,
+/**/
+    1847,
+/**/
+    1846,
+/**/
+    1845,
+/**/
+    1844,
+/**/
+    1843,
+/**/
+    1842,
+/**/
+    1841,
+/**/
+    1840,
+/**/
+    1839,
+/**/
+    1838,
+/**/
+    1837,
+/**/
+    1836,
+/**/
+    1835,
+/**/
+    1834,
+/**/
+    1833,
+/**/
+    1832,
+/**/
+    1831,
+/**/
+    1830,
+/**/
+    1829,
+/**/
+    1828,
+/**/
+    1827,
+/**/
+    1826,
+/**/
+    1825,
+/**/
+    1824,
+/**/
+    1823,
+/**/
+    1822,
+/**/
+    1821,
+/**/
+    1820,
+/**/
+    1819,
+/**/
+    1818,
+/**/
+    1817,
+/**/
+    1816,
+/**/
+    1815,
+/**/
+    1814,
+/**/
+    1813,
+/**/
+    1812,
+/**/
+    1811,
+/**/
+    1810,
+/**/
+    1809,
+/**/
+    1808,
+/**/
+    1807,
+/**/
+    1806,
+/**/
+    1805,
+/**/
+    1804,
+/**/
+    1803,
+/**/
+    1802,
+/**/
+    1801,
+/**/
+    1800,
+/**/
+    1799,
+/**/
+    1798,
+/**/
+    1797,
+/**/
+    1796,
+/**/
+    1795,
+/**/
+    1794,
+/**/
+    1793,
+/**/
+    1792,
+/**/
+    1791,
+/**/
+    1790,
+/**/
+    1789,
+/**/
+    1788,
+/**/
+    1787,
+/**/
+    1786,
+/**/
+    1785,
+/**/
+    1784,
+/**/
+    1783,
+/**/
+    1782,
+/**/
+    1781,
+/**/
+    1780,
+/**/
+    1779,
+/**/
+    1778,
+/**/
+    1777,
+/**/
+    1776,
 /**/
     1775,
 /**/
@@ -4298,7 +4472,7 @@ highest_patch(void)
     return included_patches[0];
 }
 
-#if defined(FEAT_EVAL) || defined(PROTO)
+#if defined(FEAT_EVAL)
 /*
  * Return TRUE if patch "n" has been included.
  */

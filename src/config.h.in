@@ -12,6 +12,9 @@
 /* Define unless no Wayland support found */
 #undef HAVE_WAYLAND
 
+/* Define if you want focus stealing support with Wayland clipboard  */
+#undef FEAT_WAYLAND_CLIPBOARD_FS
+
 /* Define when terminfo support found */
 #undef TERMINFO
 
@@ -525,3 +528,6 @@
 
 /* Define if you want to load libgpm dynamically */
 #undef DYNAMIC_GPM
+
+/* Define if you want to have clipboard provider functionality*/
+#undef FEAT_CLIPBOARD_PROVIDER
