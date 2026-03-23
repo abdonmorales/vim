@@ -232,6 +232,7 @@ do_mouse(
     int		moved;		// Has cursor moved?
     int		in_status_line;	// mouse in status line
     static int	in_tab_line = FALSE; // mouse clicked in tab line
+    static int	in_tabpanel = FALSE; // mouse clicked in tabpanel
     int		in_sep_line;	// mouse in vertical separator line
     int		c1, c2;
 #if defined(FEAT_FOLDING)
@@ -334,7 +335,11 @@ do_mouse(
 
     // Ignore drag and release events if we didn't get a click.
     if (is_click)
+    {
 	got_click = TRUE;
+	in_tab_line = FALSE;
+	in_tabpanel = FALSE;
+    }
     else
     {
 	if (!got_click)			// didn't get click, ignore
@@ -342,9 +347,10 @@ do_mouse(
 	if (!is_drag)			// release, reset got_click
 	{
 	    got_click = FALSE;
-	    if (in_tab_line)
+	    if (in_tab_line || in_tabpanel)
 	    {
 		in_tab_line = FALSE;
+		in_tabpanel = FALSE;
 		return FALSE;
 	    }
 	}
@@ -469,73 +475,110 @@ do_mouse(
 
     start_visual.lnum = 0;
 
-    if (TabPageIdxs != NULL)  // only when initialized
+    struct tabpage_label_info {
+	bool is_panel;	    // label type. true: tabpanel, false: tab line
+	bool just_in;	    // just in tabpage label area
+	bool just_click;    // just click tabpage label area
+	int nr;		    // tabpage number
+    } tp_label = { false, false, false, 0 };
+
+    // Check for clicking in the tab page panel.
+#if defined(FEAT_TABPANEL)
+    if (mouse_col < firstwin->w_wincol
+		|| mouse_col >= firstwin->w_wincol + topframe->fr_width)
     {
-	// Check for clicking in the tab page line.
-	if (mouse_row == 0 && firstwin->w_winrow > 0)
+	tp_label.is_panel = true;
+	tp_label.just_in = true;
+	tp_label.nr = get_tabpagenr_on_tabpanel();
+
+	// click in a tab selects that tab page
+	if (is_click && cmdwin_type == 0)
+	    tp_label.just_click = true;
+    }
+    else
+#endif
+    // Check for clicking in the tab page line.
+    if (TabPageIdxs != NULL && mouse_row == 0 && firstwin->w_winrow > 0)
+    {
+	tp_label.just_in = true;
+	tp_label.nr = TabPageIdxs[mouse_col];
+
+	// click in a tab selects that tab page
+	if (is_click && cmdwin_type == 0
+		&& mouse_col < firstwin->w_wincol + topframe->fr_width)
+	    tp_label.just_click = true;
+    }
+
+    if (tp_label.just_in)
+    {
+	if (is_drag)
 	{
-	    if (is_drag)
+	    if (in_tabpanel || in_tab_line)
 	    {
-		if (in_tab_line)
-		{
-		    c1 = TabPageIdxs[mouse_col];
-		    tabpage_move(c1 <= 0 ? 9999 : c1 < tabpage_index(curtab)
-								? c1 - 1 : c1);
-		}
-		return FALSE;
+		c1 = tp_label.nr;
+		tabpage_move(c1 <= 0 ? 9999 : c1 < tabpage_index(curtab)
+							    ? c1 - 1 : c1);
 	    }
+	    return FALSE;
+	}
 
-	    // click in a tab selects that tab page
-	    if (is_click && cmdwin_type == 0 && mouse_col < Columns)
-	    {
+	if (tp_label.just_click)
+	{
+	    if (tp_label.is_panel)
+		in_tabpanel = TRUE;
+	    else
 		in_tab_line = TRUE;
-		c1 = TabPageIdxs[mouse_col];
-		if (c1 >= 0)
+	    c1 = tp_label.nr;
+	    if (c1 >= 0)
+	    {
+		if ((mod_mask & MOD_MASK_MULTI_CLICK) == MOD_MASK_2CLICK)
 		{
-		    if ((mod_mask & MOD_MASK_MULTI_CLICK) == MOD_MASK_2CLICK)
-		    {
-			// double click opens new page
-			end_visual_mode_keep_button();
-			tabpage_new();
-			tabpage_move(c1 == 0 ? 9999 : c1 - 1);
-		    }
-		    else
-		    {
-			// Go to specified tab page, or next one if not clicking
-			// on a label.
-			goto_tabpage(c1);
-
-			// It's like clicking on the status line of a window.
-			if (curwin != old_curwin)
-			    end_visual_mode_keep_button();
-		    }
+		    // double click opens new page
+		    end_visual_mode_keep_button();
+		    tabpage_new();
+		    tabpage_move(c1 == 0 ? 9999 : c1 - 1);
 		}
 		else
 		{
-		    tabpage_T	*tp;
+		    // Go to specified tab page, or next one if not clicking
+		    // on a label.
+		    goto_tabpage(c1);
 
-		    // Close the current or specified tab page.
-		    if (c1 == -999)
-			tp = curtab;
-		    else
-			tp = find_tabpage(-c1);
-		    if (tp == curtab)
-		    {
-			if (first_tabpage->tp_next != NULL)
-			    tabpage_close(FALSE);
-		    }
-		    else if (tp != NULL)
-			tabpage_close_other(tp, FALSE);
+		    // It's like clicking on the status line of a window.
+		    if (curwin != old_curwin)
+			end_visual_mode_keep_button();
 		}
 	    }
-	    return TRUE;
+	    else
+	    {
+		tabpage_T	*tp;
+
+		// Close the current or specified tab page.
+		if (c1 == -999)
+		    tp = curtab;
+		else
+		    tp = find_tabpage(-c1);
+		if (tp == curtab)
+		{
+		    if (first_tabpage->tp_next != NULL)
+			tabpage_close(FALSE);
+		}
+		else if (tp != NULL)
+		    tabpage_close_other(tp, FALSE);
+	    }
 	}
-	else if (is_drag && in_tab_line)
-	{
+	return TRUE;
+    }
+    else if (is_drag && (in_tabpanel || (in_tab_line && TabPageIdxs != NULL)))
+    {
+#if defined(FEAT_TABPANEL)
+	if (in_tabpanel)
+	    c1 = get_tabpagenr_on_tabpanel();
+	else
+#endif
 	    c1 = TabPageIdxs[mouse_col];
-	    tabpage_move(c1 <= 0 ? 9999 : c1 - 1);
-	    return FALSE;
-	}
+	tabpage_move(c1 <= 0 ? 9999 : c1 - 1);
+	return FALSE;
     }
 
     // When 'mousemodel' is "popup" or "popup_setpos", translate mouse events:
@@ -752,7 +795,8 @@ do_mouse(
 #endif
 
 #if defined(FEAT_CLIPBOARD)
-    if ((jump_flags & IN_OTHER_WIN) && !VIsual_active && clip_star.available)
+    if ((jump_flags & IN_OTHER_WIN) && !VIsual_active &&
+	    (clip_star.available || clip_plus.available))
     {
 	clip_modeless(which_button, is_click, is_drag);
 	return FALSE;
@@ -1129,7 +1173,7 @@ do_mousescroll(cmdarg_T *cap)
 	if (!(State & MODE_INSERT) && (mouse_vert_step < 0 || shift_or_ctrl))
 	{
 	    // whole page up or down
-	    onepage(cap->arg == MSCR_UP ? FORWARD : BACKWARD, 1L);
+	    pagescroll(cap->arg == MSCR_UP ? FORWARD : BACKWARD, 1L, FALSE);
 	}
 	else
 	{
@@ -1384,15 +1428,15 @@ get_pseudo_mouse_code(
     return (int)KE_IGNORE;	    // not recognized, ignore it
 }
 
-# define HMT_NORMAL	1
-# define HMT_NETTERM	2
-# define HMT_DEC	4
-# define HMT_JSBTERM	8
-# define HMT_PTERM	16
-# define HMT_URXVT	32
-# define HMT_GPM	64
-# define HMT_SGR	128
-# define HMT_SGR_REL	256
+#define HMT_NORMAL	1
+#define HMT_NETTERM	2
+#define HMT_DEC	4
+#define HMT_JSBTERM	8
+#define HMT_PTERM	16
+#define HMT_URXVT	32
+#define HMT_GPM	64
+#define HMT_SGR	128
+#define HMT_SGR_REL	256
 static int has_mouse_termcode = 0;
 
     void
@@ -1443,7 +1487,7 @@ set_mouse_termcode(
 	has_mouse_termcode |= HMT_NORMAL;
 }
 
-#if defined(UNIX) || defined(VMS) || defined(PROTO)
+#if defined(UNIX) || defined(VMS)
     void
 del_mouse_termcode(
     int		n)	// KS_MOUSE, KS_NETTERM_MOUSE or KS_DEC_MOUSE
@@ -1727,7 +1771,7 @@ retnomove:
 
     if (!(flags & MOUSE_FOCUS))
     {
-	if (row < 0 || col < 0)			// check if it makes sense
+	if (row < 0 || col < 0) // check if it makes sense
 	    return IN_UNKNOWN;
 
 	// find the window where the row is in and adjust "row" and "col" to be
@@ -1966,7 +2010,7 @@ retnomove:
 	    for (first = TRUE; curwin->w_topline > 1; )
 	    {
 #ifdef FEAT_DIFF
-		if (curwin->w_topfill < diff_check(curwin, curwin->w_topline))
+		if (curwin->w_topfill < diff_check_fill(curwin, curwin->w_topline))
 		    ++count;
 		else
 #endif
@@ -1978,7 +2022,7 @@ retnomove:
 		(void)hasFolding(curwin->w_topline, &curwin->w_topline, NULL);
 #endif
 #ifdef FEAT_DIFF
-		if (curwin->w_topfill < diff_check(curwin, curwin->w_topline))
+		if (curwin->w_topfill < diff_check_fill(curwin, curwin->w_topline))
 		    ++curwin->w_topfill;
 		else
 #endif
@@ -2065,7 +2109,8 @@ retnomove:
 #ifdef FEAT_FOLDING
 	// Remember the character under the mouse, it might be a '-' or '+' in
 	// the fold column.
-	mouse_char = ScreenLines[off];
+	mouse_char = enc_utf8 && ScreenLinesUC[off] != 0
+				       ? ScreenLinesUC[off] : ScreenLines[off];
 #endif
     }
 
@@ -2098,35 +2143,7 @@ retnomove:
 	    redraw_cmdline = TRUE;	// show visual mode later
     }
 
-    if (col_from_screen == MAXCOL)
-    {
-	// When clicking after end of line, still need to set correct curswant
-	int off_l = LineOffset[prev_row] + curwin->w_wincol;
-	if (ScreenCols[off_l] < MAXCOL)
-	{
-	    // Binary search to find last char in line
-	    int off_r = LineOffset[prev_row] + prev_col;
-	    int off_click = off_r;
-	    while (off_l < off_r)
-	    {
-		int off_m = (off_l + off_r + 1) / 2;
-		if (ScreenCols[off_m] < MAXCOL)
-		    off_l = off_m;
-		else
-		    off_r = off_m - 1;
-	    }
-	    colnr_T eol_vcol = ScreenCols[off_r];
-	    if (eol_vcol < 0)
-		// Empty line or whole line before w_leftcol,
-		// with columns before buffer text
-		eol_vcol = curwin->w_leftcol - 1;
-	    col = eol_vcol + (off_click - off_r);
-	}
-	else
-	    // Empty line or whole line before w_leftcol
-	    col = prev_col - curwin->w_wincol + curwin->w_leftcol;
-    }
-    else if (col_from_screen >= 0)
+    if (col_from_screen >= 0)
     {
 	// Use the virtual column from ScreenCols[], it is accurate also after
 	// concealed characters.
@@ -2300,6 +2317,10 @@ check_termcode_mouse(
 	 *	   0x23 = any button release
 	 *	   0x60 = button 4 down (scroll wheel down)
 	 *	   0x61 = button 5 down (scroll wheel up)
+	 *	   0x62 = button 6 down (scroll wheel left)
+	 *	   0x63 = button 7 down (scroll wheel right)
+	 *	   0xa0 = button 8 down (backward button)
+	 *	   0xa1 = button 9 down (forward button)
 	 *	add 0x04 for SHIFT
 	 *	add 0x08 for ALT
 	 *	add 0x10 for CTRL
@@ -2454,7 +2475,7 @@ check_termcode_mouse(
 	 * Linux console with GPM and the MS-DOS or Win32 console
 	 * (multi-clicks use >= 0x60).
 	 */
-	if (mouse_code >= MOUSEWHEEL_LOW
+	if (mouse_code >= MOUSEWHEEL_LOW && mouse_code < MOUSESIDEBUTTONS_LOW
 #  ifdef FEAT_GUI
 		&& !gui.in_use
 #  endif
@@ -2977,7 +2998,13 @@ check_termcode_mouse(
 	held_button = MOUSE_RELEASE;
     }
     else
+    {
+#if defined(UNIX)
+	if (use_xterm_mouse() && orig_mouse_code >= MOUSESIDEBUTTONS_LOW)
+	    current_button = (current_button) ? MOUSE_X2 : MOUSE_X1;
+#endif
 	key_name[1] = get_pseudo_mouse_code(current_button, is_click, is_drag);
+    }
 
 
     // Make sure the mouse position is valid.  Some terminals may return weird
@@ -3057,16 +3084,22 @@ mouse_comp_pos(
 
 	if (win->w_skipcol > 0 && lnum == win->w_topline)
 	{
-	    // Adjust for 'smoothscroll' clipping the top screen lines.
-	    // A similar formula is used in curs_columns().
 	    int width1 = win->w_width - win_col_off(win);
-	    int skip_lines = 0;
-	    if (win->w_skipcol > width1)
-		skip_lines = (win->w_skipcol - width1)
+
+	    if (width1 > 0)
+	    {
+		int skip_lines = 0;
+
+		// Adjust for 'smoothscroll' clipping the top screen lines.
+		// A similar formula is used in curs_columns().
+		if (win->w_skipcol > width1)
+		    skip_lines = (win->w_skipcol - width1)
 					    / (width1 + win_col_off2(win)) + 1;
-	    else if (win->w_skipcol > 0)
-		skip_lines = 1;
-	    count -= skip_lines;
+		else if (win->w_skipcol > 0)
+		    skip_lines = 1;
+
+		count -= skip_lines;
+	    }
 	}
 
 	if (count > row)
@@ -3156,7 +3189,14 @@ mouse_find_win(int *rowp, int *colp, mouse_find_T popup UNUSED)
 #endif
 
     fp = topframe;
+
+    if (*colp < firstwin->w_wincol
+	    || *colp >= firstwin->w_wincol + fp->fr_width
+	    || *rowp < firstwin->w_winrow)
+	return NULL;
+
     *rowp -= firstwin->w_winrow;
+    *colp -= firstwin->w_wincol;
     for (;;)
     {
 	if (fp->fr_layout == FR_LEAF)
@@ -3194,7 +3234,7 @@ mouse_find_win(int *rowp, int *colp, mouse_find_T popup UNUSED)
 }
 
 #if defined(NEED_VCOL2COL) || defined(FEAT_BEVAL) || defined(FEAT_PROP_POPUP) \
-	|| defined(FEAT_EVAL) || defined(PROTO)
+	|| defined(FEAT_EVAL)
 /*
  * Convert a virtual (screen) column to a character column.
  * The first column is zero.
@@ -3224,7 +3264,7 @@ vcol2col(win_T *wp, linenr_T lnum, int vcol, colnr_T *coladdp)
 }
 #endif
 
-#if defined(FEAT_EVAL) || defined(PROTO)
+#if defined(FEAT_EVAL)
 /*
  * "getmousepos()" function.
  */

@@ -1,7 +1,6 @@
 " Test Vim9 type aliases
 
-source check.vim
-import './vim9.vim' as v9
+import './util/vim9.vim' as v9
 
 " Test for :type command to create type aliases
 def Test_typealias()
@@ -47,6 +46,13 @@ def Test_typealias()
     type Index = number
   END
   v9.CheckSourceFailure(lines, 'E1393: Type can only be defined in Vim9 script', 1)
+
+  # The complete "type" should be specified
+  lines =<< trim END
+    vim9script
+    typ Index = number
+  END
+  v9.CheckSourceFailure(lines, 'E1065: Command cannot be shortened: typ Index = number', 2)
 
   # Use :type without any arguments
   lines =<< trim END
@@ -169,6 +175,14 @@ def Test_typealias()
     endclass
     type AC = C
     assert_equal('class<C>', typename(AC))
+  END
+  v9.CheckSourceSuccess(lines)
+
+  # another command follows a type alias
+  lines =<< trim END
+    vim9script
+    type MyType = number | var x = 20
+    assert_equal(20, x)
   END
   v9.CheckSourceSuccess(lines)
 
@@ -355,7 +369,7 @@ def Test_typealias_import()
 
     var myNum: A.SomeType = 10
   END
-  v9.CheckScriptFailure(lines, 'E1010: Type not recognized: A.SomeType = 10', 4)
+  v9.CheckScriptFailure(lines, 'E1010: Type not recognized: A.SomeType', 4)
 
   # Use a type alias that is not exported
   lines =<< trim END

@@ -1,7 +1,7 @@
 " The default vimrc file.
 "
 " Maintainer:	The Vim Project <https://github.com/vim/vim>
-" Last change:	2023 Aug 10
+" Last Change:	2025 Nov 28
 " Former Maintainer:	Bram Moolenaar <Bram@vim.org>
 "
 " This is loaded if no vimrc file was found.
@@ -32,14 +32,6 @@ endif
 silent! while 0
   set nocompatible
 silent! endwhile
-
-" Allow backspacing over everything in insert mode.
-set backspace=indent,eol,start
-
-set history=200		" keep 200 lines of command line history
-set ruler		" show the cursor position all the time
-set showcmd		" display incomplete commands
-set wildmenu		" display completion matches in a status line
 
 set ttimeout		" time out for key codes
 set ttimeoutlen=100	" wait up to 100ms after Esc for special key
@@ -107,14 +99,20 @@ if 1
     " (happens when dropping a file on gvim), for a commit or rebase message
     " (likely a different one than last time), and when using xxd(1) to filter
     " and edit binary files (it transforms input files back and forth, causing
-    " them to have dual nature, so to speak)
+    " them to have dual nature, so to speak) or when running the new tutor
     autocmd BufReadPost *
       \ let line = line("'\"")
       \ | if line >= 1 && line <= line("$") && &filetype !~# 'commit'
-      \      && index(['xxd', 'gitrebase'], &filetype) == -1
+      \      && index(['xxd', 'gitrebase', 'tutor'], &filetype) == -1
+      \      && !&diff
       \ |   execute "normal! g`\""
       \ | endif
 
+    " Set the default background for putty to dark. Putty usually sets the
+    " $TERM to xterm and by default it starts with a dark background which
+    " makes syntax highlighting often hard to read with bg=light
+    " undo this using:  ":au! vimStartup TermResponse"
+    autocmd TermResponse * if v:termresponse == "\e[>0;136;0c" | set bg=dark | endif
   augroup END
 
   " Quite a few people accidentally type "q:" instead of ":q" and get confused
@@ -131,6 +129,10 @@ if 1
 
 endif
 
+" UTCS: Set dark background for the Longhorn theme.
+" Revert with ":set background=light".
+set background=dark
+
 " Switch syntax highlighting on when the terminal has colors or when using the
 " GUI (which always has colors).
 if &t_Co > 2 || has("gui_running")
@@ -138,8 +140,13 @@ if &t_Co > 2 || has("gui_running")
   syntax on
 
   " I like highlighting strings inside C comments.
-  " Revert with ":unlet c_comment_strings".
+  " Revert with ":unlet g:c_comment_strings".
   let c_comment_strings=1
+
+  " UTCS: Load the Longhorn (Burnt Orange) colorscheme.
+  " This is the default look for the UTCS Vim distribution.
+  " For the original Vim appearance, use ":colorscheme classic".
+  silent! colorscheme longhorn
 endif
 
 " Convenient command to see the difference between the current buffer and the

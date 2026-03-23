@@ -1,7 +1,6 @@
 " Tests for tagjump (tags and special searches)
 
-source check.vim
-source screendump.vim
+source util/screendump.vim
 
 " SEGV occurs in older versions.  (At least 7.4.1748 or older)
 func Test_ptag_with_notagstack()
@@ -145,7 +144,30 @@ func Test_tagjump_switchbuf()
   1tabnext | stag third
   call assert_equal(2, tabpagenr('$'))
   call assert_equal(3, line('.'))
+  tabonly
 
+  " use a vertically split window
+  enew | only
+  set switchbuf=vsplit
+  stag third
+  call assert_equal(2, winnr('$'))
+  call assert_equal(1, winnr())
+  call assert_equal(3, line('.'))
+  call assert_equal(['row', [['leaf', win_getid(1)], ['leaf', win_getid(2)]]], winlayout())
+
+  " jump to a tag in a new tabpage
+  enew | only
+  set switchbuf=newtab
+  stag second
+  call assert_equal(2, tabpagenr('$'))
+  call assert_equal(2, tabpagenr())
+  call assert_equal(2, line('.'))
+  0tab stag third
+  call assert_equal(3, tabpagenr('$'))
+  call assert_equal(1, tabpagenr())
+  call assert_equal(3, line('.'))
+
+  tabclose!
   tabclose!
   enew | only
   set tags&
@@ -751,15 +773,15 @@ func Test_tag_guess()
   call writefile(code, 'Xfoo', 'D')
 
   let v:statusmsg = ''
-  ta func1
+  silent ta func1
   call assert_match('E435:', v:statusmsg)
   call assert_equal(2, line('.'))
   let v:statusmsg = ''
-  ta func2
+  silent ta func2
   call assert_match('E435:', v:statusmsg)
   call assert_equal(4, line('.'))
   let v:statusmsg = ''
-  ta func3
+  silent ta func3
   call assert_match('E435:', v:statusmsg)
   call assert_equal(5, line('.'))
   call assert_fails('ta func4', 'E434:')
@@ -958,8 +980,63 @@ func Test_tag_stack()
   call settagstack(1, {'items' : []})
   call assert_fails('pop', 'E73:')
 
+  " References to wiped buffer are deleted.
+  for i in range(10, 20)
+    edit Xtest
+    exe "tag var" .. i
+  endfor
+  edit Xtest
+
+  let t = gettagstack()
+  call assert_equal(11, t.length)
+  call assert_equal(12, t.curidx)
+
+  bwipe!
+
+  let t = gettagstack()
+  call assert_equal(0, t.length)
+  call assert_equal(1, t.curidx)
+
+  " References to wiped buffer are deleted with multiple tabpages.
+  let w1 = win_getid()
+  call settagstack(1, {'items' : []})
+  for i in range(10, 20) | edit Xtest | exe "tag var" .. i | endfor
+  enew
+
+  new
+  let w2 = win_getid()
+  call settagstack(1, {'items' : []})
+  for i in range(10, 20) | edit Xtest | exe "tag var" .. i | endfor
+  enew
+
+  tabnew
+  let w3 = win_getid()
+  call settagstack(1, {'items' : []})
+  for i in range(10, 20) | edit Xtest | exe "tag var" .. i | endfor
+  enew
+
+  new
+  let w4 = win_getid()
+  call settagstack(1, {'items' : []})
+  for i in range(10, 20) | edit Xtest | exe "tag var" .. i | endfor
+  enew
+
+  for w in [w1, w2, w3, w4]
+    let t = gettagstack(w)
+    call assert_equal(11, t.length)
+    call assert_equal(12, t.curidx)
+  endfor
+
+  bwipe! Xtest
+
+  for w in [w1, w2, w3, w4]
+    let t = gettagstack(w)
+    call assert_equal(0, t.length)
+    call assert_equal(1, t.curidx)
+  endfor
+
+  %bwipe!
   set tags&
-  %bwipe
 endfunc
 
 " Test for browsing multiple matching tags
@@ -1238,7 +1315,7 @@ func Test_inc_search()
   call assert_fails('isplit 6 foo', 'E389:')
   call assert_fails('isplit bar', 'E389:')
 
-  close!
+  bw!
 endfunc
 
 " this was using a line from ml_get() freed by the regexp
@@ -1351,7 +1428,7 @@ func Test_macro_search()
   call assert_fails('dsplit 6 FOO', 'E388:')
   call assert_fails('dsplit BAR', 'E388:')
 
-  close!
+  bw!
 endfunc
 
 func Test_define_search()
@@ -1397,7 +1474,7 @@ func Test_comment_search()
   call assert_beeps('normal! 15|[/')
   call setline(1, '        /* comment')
   call assert_beeps('normal! 15|]/')
-  close!
+  bw!
 endfunc
 
 " Test for the 'taglength' option
@@ -1558,6 +1635,62 @@ func Test_tagbsearch()
   call assert_fails('tag bbb', 'E426:')
 
   set tags& tagbsearch&
+endfunc
+
+" Test tag guessing with very short names
+func Test_tag_guess_short()
+  call writefile(["!_TAG_FILE_ENCODING\tutf-8\t//",
+        \ "y\tXf\t/^y()/"],
+        \ 'Xt', 'D')
+  set tags=Xt cpoptions+=t
+  call writefile(['', 'int * y () {}', ''], 'Xf', 'D')
+
+  let v:statusmsg = ''
+  let @/ = ''
+  silent ta y
+  call assert_match('E435:', v:statusmsg)
+  call assert_equal(2, line('.'))
+  call assert_match('<y', @/)
+
+  set tags& cpoptions-=t
+endfunc
+
+func Test_tag_excmd_with_nostartofline()
+  call writefile(["!_TAG_FILE_ENCODING\tutf-8\t//",
+        \ "f\tXfile\tascii"],
+        \ 'Xtags', 'D')
+  call writefile(['f', 'foobar'], 'Xfile', 'D')
+
+  set nostartofline
+  new Xfile
+  setlocal tags=Xtags
+  normal! G$
+  " This used to cause heap-buffer-overflow
+  tag f
+
+  bwipe!
+  set startofline&
+endfunc
+
+func Test_tag_excmd_with_number_vim9script()
+  call writefile(["1#1\tXfile\t2;\"\ti"], 'Xtags', 'D')
+  call writefile(['f', 'foobar'], 'Xfile', 'D')
+  let list =<< trim END
+  vim9script
+  command! Tag call Tag()
+  def Tag(): void
+    exe "tag 1#1"
+  enddef
+  END
+  call writefile(list, 'Xtags.vim', 'D')
+
+  setlocal tags=Xtags
+  so Xtags.vim
+  :Tag
+  call assert_equal('Xfile', bufname('%'))
+  call assert_equal(2, line('.'))
+
+  bwipe!
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

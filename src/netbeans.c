@@ -25,7 +25,7 @@
 
 #include "vim.h"
 
-#if defined(FEAT_NETBEANS_INTG) || defined(PROTO)
+#if defined(FEAT_NETBEANS_INTG)
 
 #ifndef MSWIN
 # include <netdb.h>
@@ -211,9 +211,9 @@ netbeans_connect(char *params, int doabort)
 	if (nb_channel != NULL)
 	{
 	    // success
-# ifdef FEAT_BEVAL_GUI
+#ifdef FEAT_BEVAL_GUI
 	    bevalServers |= BEVAL_NETBEANS;
-# endif
+#endif
 
 	    // success, login
 	    vim_snprintf(buf, sizeof(buf), "AUTH %s\n", password);
@@ -932,7 +932,7 @@ nb_partialremove(linenr_T lnum, colnr_T first, colnr_T last)
     int lastbyte = last;
 
     oldtext = ml_get(lnum);
-    oldlen = (int)STRLEN(oldtext);
+    oldlen = ml_get_len(lnum);
     if (first >= (colnr_T)oldlen || oldlen == 0)  // just in case
 	return;
     if (lastbyte >= oldlen)
@@ -957,8 +957,8 @@ nb_joinlines(linenr_T first, linenr_T other)
     int len_first, len_other;
     char_u *p;
 
-    len_first = (int)STRLEN(ml_get(first));
-    len_other = (int)STRLEN(ml_get(other));
+    len_first = ml_get_len(first);
+    len_other = ml_get_len(other);
     p = alloc(len_first + len_other + 1);
     if (p == NULL)
 	return;
@@ -1402,7 +1402,7 @@ nb_do_cmd(
 			int	col = pos == NULL ? 0 : pos->col;
 
 			// Insert halfway a line.
-			newline = alloc(STRLEN(oldline) + len + 1);
+			newline = alloc(ml_get_len(lnum) + len + 1);
 			if (newline != NULL)
 			{
 			    mch_memmove(newline, oldline, (size_t)col);
@@ -1689,8 +1689,10 @@ nb_do_cmd(
 	    if (streq((char *)args, "T") && buf->bufp != curbuf)
 	    {
 		exarg_T exarg;
+		CLEAR_FIELD(exarg);
 		exarg.cmd = (char_u *)"goto";
 		exarg.forceit = FALSE;
+		exarg.cmdidx = CMD_USER;
 		dosetvisible = TRUE;
 		goto_buffer(&exarg, DOBUF_FIRST, FORWARD, buf->bufp->b_fnum);
 		do_update = 1;
@@ -1745,6 +1747,9 @@ nb_do_cmd(
 	    {
 		check_status(buf->bufp);
 		redraw_tabline = TRUE;
+#if defined(FEAT_TABPANEL)
+		redraw_tabpanel = TRUE;
+#endif
 		maketitle();
 		update_screen(0);
 	    }
@@ -2297,7 +2302,7 @@ special_keys(char_u *args)
 	if ((sep = strchr(tok, '-')) != NULL)
 	{
 	    *sep = NUL;
-	    while (*tok)
+	    while (*tok && i + 2 < KEYBUFLEN)
 	    {
 		switch (*tok)
 		{
@@ -2316,7 +2321,7 @@ special_keys(char_u *args)
 
 	if (strlen(tok) + i < KEYBUFLEN)
 	{
-	    strcpy(&keybuf[i], tok);
+	    vim_strncpy((char_u *)&keybuf[i], (char_u *)tok, KEYBUFLEN - i - 1);
 	    vim_snprintf(cmdbuf, sizeof(cmdbuf),
 				 "<silent><%s> :nbkey %s<CR>", keybuf, keybuf);
 	    do_map(MAPTYPE_MAP, (char_u *)cmdbuf, MODE_NORMAL, FALSE);
@@ -2444,7 +2449,7 @@ netbeans_keyname(int key, char *buf)
     strcat(buf, name);
 }
 
-#if defined(FEAT_BEVAL) || defined(PROTO)
+#if defined(FEAT_BEVAL)
 /*
  * Function to be called for balloon evaluation.  Grabs the text under the
  * cursor and sends it to the debugger for evaluation.  The debugger should
@@ -2547,7 +2552,7 @@ netbeans_send_disconnect(void)
     }
 }
 
-#if defined(FEAT_EVAL) || defined(PROTO)
+#if defined(FEAT_EVAL)
     int
 set_ref_in_nb_channel(int copyID)
 {
@@ -2559,12 +2564,12 @@ set_ref_in_nb_channel(int copyID)
 
     tv.v_type = VAR_CHANNEL;
     tv.vval.v_channel = nb_channel;
-    abort = set_ref_in_item(&tv, copyID, NULL, NULL);
+    abort = set_ref_in_item(&tv, copyID, NULL, NULL, NULL);
     return abort;
 }
 #endif
 
-#if defined(FEAT_GUI_X11) || defined(FEAT_GUI_MSWIN) || defined(PROTO)
+#if defined(FEAT_GUI_X11) || defined(FEAT_GUI_MSWIN)
 /*
  * Tell netbeans that the window was moved or resized.
  */
@@ -2598,8 +2603,13 @@ netbeans_file_activated(buf_T *bufp)
 	return;
 
     q = nb_quote(bufp->b_ffname);
-    if (q == NULL || bp == NULL)
+    if (q == NULL)
 	return;
+    if (bp == NULL)
+    {
+	vim_free(q);
+	return;
+    }
 
     vim_snprintf(buffer, sizeof(buffer),  "%d:fileOpened=%d \"%s\" %s %s\n",
 	    bufno,
@@ -2999,7 +3009,7 @@ netbeans_is_guarded(linenr_T top, linenr_T bot)
     return FALSE;
 }
 
-#if defined(FEAT_GUI_X11) || defined(PROTO)
+#if defined(FEAT_GUI_X11)
 /*
  * We have multiple signs to draw at the same location. Draw the
  * multi-sign indicator instead. This is the Motif version.
@@ -3041,33 +3051,33 @@ netbeans_draw_multisign_indicator(int row)
     int i;
     int y;
     int x;
-#if GTK_CHECK_VERSION(3,0,0)
+# if GTK_CHECK_VERSION(3,0,0)
     cairo_t *cr = NULL;
-#else
+# else
     GdkDrawable *drawable = gui.drawarea->window;
-#endif
+# endif
 
     if (!NETBEANS_OPEN)
 	return;
 
-#if GTK_CHECK_VERSION(3,0,0)
+# if GTK_CHECK_VERSION(3,0,0)
     cr = cairo_create(gui.surface);
     cairo_set_source_rgba(cr,
 	    gui.fgcolor->red, gui.fgcolor->green, gui.fgcolor->blue,
 	    gui.fgcolor->alpha);
-#endif
+# endif
 
     x = 0;
     y = row * gui.char_height + 2;
 
     for (i = 0; i < gui.char_height - 3; i++)
-#if GTK_CHECK_VERSION(3,0,0)
+# if GTK_CHECK_VERSION(3,0,0)
 	cairo_rectangle(cr, x+2, y++, 1, 1);
-#else
+# else
 	gdk_draw_point(drawable, gui.text_gc, x+2, y++);
-#endif
+# endif
 
-#if GTK_CHECK_VERSION(3,0,0)
+# if GTK_CHECK_VERSION(3,0,0)
     cairo_rectangle(cr, x+0, y, 1, 1);
     cairo_rectangle(cr, x+2, y, 1, 1);
     cairo_rectangle(cr, x+4, y++, 1, 1);
@@ -3075,7 +3085,7 @@ netbeans_draw_multisign_indicator(int row)
     cairo_rectangle(cr, x+2, y, 1, 1);
     cairo_rectangle(cr, x+3, y++, 1, 1);
     cairo_rectangle(cr, x+2, y, 1, 1);
-#else
+# else
     gdk_draw_point(drawable, gui.text_gc, x+0, y);
     gdk_draw_point(drawable, gui.text_gc, x+2, y);
     gdk_draw_point(drawable, gui.text_gc, x+4, y++);
@@ -3083,11 +3093,11 @@ netbeans_draw_multisign_indicator(int row)
     gdk_draw_point(drawable, gui.text_gc, x+2, y);
     gdk_draw_point(drawable, gui.text_gc, x+3, y++);
     gdk_draw_point(drawable, gui.text_gc, x+2, y);
-#endif
+# endif
 
-#if GTK_CHECK_VERSION(3,0,0)
+# if GTK_CHECK_VERSION(3,0,0)
     cairo_destroy(cr);
-#endif
+# endif
 }
 #endif // FEAT_GUI_GTK
 
@@ -3314,8 +3324,7 @@ get_buf_size(buf_T *bufp)
 	eol_size = 1;
     for (lnum = 1; lnum <= bufp->b_ml.ml_line_count; ++lnum)
     {
-	char_count += (long)STRLEN(ml_get_buf(bufp, lnum, FALSE))
-	    + eol_size;
+	char_count += ml_get_buf_len(bufp, lnum) + eol_size;
 	// Check for a CTRL-C every 100000 characters
 	if (char_count > last_check)
 	{

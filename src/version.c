@@ -13,7 +13,7 @@
  * Vim originated from Stevie version 3.6 (Fish disk 217) by GRWalter (Fred)
  * It has been changed beyond recognition since then.
  *
- * Differences between version 8.2 and 9.0 can be found with ":help version9".
+ * Differences between version 8.2 and 9.1 can be found with ":help version9".
  * Differences between version 7.4 and 8.x can be found with ":help version8".
  * Differences between version 6.4 and 7.x can be found with ":help version7".
  * Differences between version 5.8 and 6.x can be found with ":help version6".
@@ -28,8 +28,8 @@
 char		*Version = VIM_VERSION_SHORT;
 static char	*mediumVersion = VIM_VERSION_MEDIUM;
 
-#if defined(HAVE_DATE_TIME) || defined(PROTO)
-# if (defined(VMS) && defined(VAXC)) || defined(PROTO)
+#if defined(HAVE_DATE_TIME)
+# if defined(VMS) && defined(VAXC)
 char	longVersion[sizeof(VIM_VERSION_LONG_DATE) + sizeof(__DATE__)
 						      + sizeof(__TIME__) + 3];
 
@@ -41,13 +41,13 @@ init_longVersion(void)
      * VAX C can't concatenate strings in the preprocessor.
      */
     strcpy(longVersion, VIM_VERSION_LONG_DATE);
-#ifdef BUILD_DATE
+#  ifdef BUILD_DATE
     strcat(longVersion, BUILD_DATE);
-#else
+#  else
     strcat(longVersion, __DATE__);
     strcat(longVersion, " ");
     strcat(longVersion, __TIME__);
-#endif
+#  endif
     strcat(longVersion, ")");
 }
 
@@ -60,15 +60,15 @@ init_longVersion(void)
     if (longVersion != NULL)
 	return;
 
-#ifdef BUILD_DATE
+#  ifdef BUILD_DATE
     char *date_time = BUILD_DATE;
-#else
+#  else
     char *date_time = __DATE__ " " __TIME__;
-#endif
+#  endif
     char *msg = _("%s (%s, compiled %s)");
     size_t len = strlen(msg)
-	+ strlen(VIM_VERSION_LONG_ONLY)
-	+ strlen(VIM_VERSION_DATE_ONLY)
+	+ STRLEN_LITERAL(VIM_VERSION_LONG_ONLY)
+	+ STRLEN_LITERAL(VIM_VERSION_DATE_ONLY)
 	+ strlen(date_time);
 
     longVersion = alloc(len);
@@ -155,6 +155,11 @@ static char *(features[]) =
 	"+clipboard",
 #else
 	"-clipboard",
+#endif
+#ifdef FEAT_CLIPBOARD_PROVIDER
+	"+clipboard_provider",
+#else
+	"-clipboard_provider",
 #endif
 	"+cmdline_compl",
 	"+cmdline_hist",
@@ -516,6 +521,11 @@ static char *(features[]) =
 	"-signs",
 #endif
 	"+smartindent",
+#ifdef FEAT_SOCKETSERVER
+	"+socketserver",
+#else
+	"-socketserver",
+#endif
 #ifdef FEAT_SODIUM
 # ifdef DYNAMIC_SODIUM
 	"+sodium/dyn",
@@ -554,6 +564,11 @@ static char *(features[]) =
 	    // only interesting on Unix systems
 #if defined(USE_SYSTEM) && defined(UNIX)
 	"+system()",
+#endif
+#if defined(FEAT_TABPANEL)
+	"+tabpanel",
+#else
+	"-tabpanel",
 #endif
 	"+tag_binary",
 	"-tag_old_static",
@@ -639,6 +654,21 @@ static char *(features[]) =
 	"-vtp",
 # endif
 #endif
+#ifdef FEAT_WAYLAND
+	"+wayland",
+#else
+	"-wayland",
+#endif
+#ifdef FEAT_WAYLAND_CLIPBOARD
+	"+wayland_clipboard",
+#else
+	"-wayland_clipboard",
+#endif
+#ifdef FEAT_WAYLAND_CLIPBOARD_FS
+	"+wayland_focus_steal",
+#else
+	"-wayland_focus_steal",
+#endif
 	"+wildignore",
 	"+wildmenu",
 	"+windows",
@@ -654,11 +684,11 @@ static char *(features[]) =
 	"-X11",
 # endif
 #endif
-# ifdef FEAT_XATTR
+#ifdef FEAT_XATTR
 	"+xattr",
-# else
+#else
 	"-xattr",
-# endif
+#endif
 #ifdef FEAT_XFONTSET
 	"+xfontset",
 #else
@@ -704,6 +734,228 @@ static char *(features[]) =
 
 static int included_patches[] =
 {   /* Add new patch number below this line */
+/**/
+    231,
+/**/
+    230,
+/**/
+    229,
+/**/
+    228,
+/**/
+    227,
+/**/
+    226,
+/**/
+    225,
+/**/
+    224,
+/**/
+    223,
+/**/
+    222,
+/**/
+    221,
+/**/
+    220,
+/**/
+    219,
+/**/
+    218,
+/**/
+    217,
+/**/
+    216,
+/**/
+    215,
+/**/
+    214,
+/**/
+    213,
+/**/
+    212,
+/**/
+    211,
+/**/
+    210,
+/**/
+    209,
+/**/
+    208,
+/**/
+    207,
+/**/
+    206,
+/**/
+    205,
+/**/
+    204,
+/**/
+    203,
+/**/
+    202,
+/**/
+    201,
+/**/
+    200,
+/**/
+    199,
+/**/
+    198,
+/**/
+    197,
+/**/
+    196,
+/**/
+    195,
+/**/
+    194,
+/**/
+    193,
+/**/
+    192,
+/**/
+    191,
+/**/
+    190,
+/**/
+    189,
+/**/
+    188,
+/**/
+    187,
+/**/
+    186,
+/**/
+    185,
+/**/
+    184,
+/**/
+    183,
+/**/
+    182,
+/**/
+    181,
+/**/
+    180,
+/**/
+    179,
+/**/
+    178,
+/**/
+    177,
+/**/
+    176,
+/**/
+    175,
+/**/
+    174,
+/**/
+    173,
+/**/
+    172,
+/**/
+    171,
+/**/
+    170,
+/**/
+    169,
+/**/
+    168,
+/**/
+    167,
+/**/
+    166,
+/**/
+    165,
+/**/
+    164,
+/**/
+    163,
+/**/
+    162,
+/**/
+    161,
+/**/
+    160,
+/**/
+    159,
+/**/
+    158,
+/**/
+    157,
+/**/
+    156,
+/**/
+    155,
+/**/
+    154,
+/**/
+    153,
+/**/
+    152,
+/**/
+    151,
+/**/
+    150,
+/**/
+    149,
+/**/
+    148,
+/**/
+    147,
+/**/
+    146,
+/**/
+    145,
+/**/
+    144,
+/**/
+    143,
+/**/
+    142,
+/**/
+    141,
+/**/
+    140,
+/**/
+    139,
+/**/
+    138,
+/**/
+    137,
+/**/
+    136,
+/**/
+    135,
+/**/
+    134,
+/**/
+    133,
+/**/
+    132,
+/**/
+    131,
+/**/
+    130,
+/**/
+    129,
+/**/
+    128,
+/**/
+    127,
+/**/
+    126,
+/**/
+    125,
+/**/
+    124,
+/**/
+    123,
+/**/
+    122,
+/**/
+    121,
 /**/
     120,
 /**/
@@ -968,7 +1220,7 @@ highest_patch(void)
     return included_patches[0];
 }
 
-#if defined(FEAT_EVAL) || defined(PROTO)
+#if defined(FEAT_EVAL)
 /*
  * Return TRUE if patch "n" has been included.
  */
@@ -1019,7 +1271,7 @@ version_msg_wrap(char_u *s, int wrap)
 {
     int		len = vim_strsize(s) + (wrap ? 2 : 0);
 
-    if (!got_int && len < (int)Columns && msg_col + len >= (int)Columns
+    if (!got_int && len < cmdline_width && msg_col + len >= cmdline_width
 								&& *s != '\n')
 	msg_putchar('\n');
     if (!got_int)
@@ -1077,7 +1329,7 @@ list_in_columns(char_u **items, int size, int current)
     }
     width += 1;
 
-    if (Columns < width)
+    if (cmdline_width < width)
     {
 	// Not enough screen columns - show one per line
 	for (i = 0; i < item_count; ++i)
@@ -1091,7 +1343,7 @@ list_in_columns(char_u **items, int size, int current)
 
     // The rightmost column doesn't need a separator.
     // Sacrifice it to fit in one more column if possible.
-    ncol = (int) (Columns + 1) / width;
+    ncol = (cmdline_width + 1) / width;
     nrow = item_count / ncol + ((item_count % ncol) ? 1 : 0);
 
     // "i" counts columns then rows.  "idx" counts rows then columns.
@@ -1155,13 +1407,21 @@ list_version(void)
 # ifdef FEAT_GUI_MSWIN
 #  ifdef VIMDLL
 #   ifdef _WIN64
-    msg_puts(_("\nMS-Windows 64-bit GUI/console version"));
+#    if defined(_M_ARM64) || defined(_M_ARM64EC)
+     msg_puts(_("\nMS-Windows ARM64 GUI/console version"));
+#    else
+     msg_puts(_("\nMS-Windows 64-bit GUI/console version"));
+#    endif
 #   else
     msg_puts(_("\nMS-Windows 32-bit GUI/console version"));
 #   endif
 #  else
 #   ifdef _WIN64
-    msg_puts(_("\nMS-Windows 64-bit GUI version"));
+#    if defined(_M_ARM64) || defined(_M_ARM64EC)
+     msg_puts(_("\nMS-Windows ARM64 GUI version"));
+#    else
+     msg_puts(_("\nMS-Windows 64-bit GUI version"));
+#    endif
 #   else
     msg_puts(_("\nMS-Windows 32-bit GUI version"));
 #   endif
@@ -1171,7 +1431,11 @@ list_version(void)
 #  endif
 # else
 #  ifdef _WIN64
+#   if defined(_M_ARM64) || defined(_M_ARM64EC)
+    msg_puts(_("\nMS-Windows ARM64 console version"));
+#   else
     msg_puts(_("\nMS-Windows 64-bit console version"));
+#   endif
 #  else
     msg_puts(_("\nMS-Windows 32-bit console version"));
 #  endif
@@ -1191,13 +1455,19 @@ list_version(void)
 #endif
 
 #ifdef VMS
-    msg_puts(_("\nOpenVMS version"));
+    msg_puts(_("\nOpenVMS (build) arch, version"));
 # ifdef HAVE_PATHDEF
     if (*compiled_arch != NUL)
     {
-	msg_puts(" - ");
+	msg_puts(": ");
 	msg_puts((char *)compiled_arch);
+	if (*compiled_vers != NUL)
+	{
+	    msg_puts(", ");
+	    msg_puts((char *)compiled_vers);
+	}
     }
+
 # endif
 
 #endif
@@ -1277,9 +1547,9 @@ list_version(void)
 # if defined(USE_GTK3)
     msg_puts(_("with GTK3 GUI."));
 # elif defined(FEAT_GUI_GNOME)
-     msg_puts(_("with GTK2-GNOME GUI."));
+    msg_puts(_("with GTK2-GNOME GUI."));
 # else
-     msg_puts(_("with GTK2 GUI."));
+    msg_puts(_("with GTK2 GUI."));
 # endif
 #elif defined(FEAT_GUI_MOTIF)
     msg_puts(_("with X11-Motif GUI."));
@@ -1311,9 +1581,20 @@ list_version(void)
     version_msg(USR_VIMRC_FILE2);
     version_msg("\"\n");
 #endif
-#ifdef USR_VIMRC_FILE3
+#if defined(USR_VIMRC_FILE3) && defined(XDG_VIMRC_FILE)
     version_msg(_(" 3rd user vimrc file: \""));
     version_msg(USR_VIMRC_FILE3);
+    version_msg("\"\n");
+    version_msg(_(" 4th user vimrc file: \""));
+    version_msg((char *)(XDG_VIMRC_FILE));
+    version_msg("\"\n");
+#elif defined(USR_VIMRC_FILE3)
+    version_msg(_(" 3rd user vimrc file: \""));
+    version_msg(USR_VIMRC_FILE3);
+    version_msg("\"\n");
+#elif defined(XDG_VIMRC_FILE)
+    version_msg(_(" 3rd user vimrc file: \""));
+    version_msg((char *)(XDG_VIMRC_FILE));
     version_msg("\"\n");
 #endif
 #ifdef USR_EXRC_FILE
@@ -1372,14 +1653,14 @@ list_version(void)
     version_msg(_("Compilation: "));
     version_msg((char *)all_cflags);
     version_msg("\n");
-#ifdef VMS
+# ifdef VMS
     if (*compiler_version != NUL)
     {
 	version_msg(_("Compiler: "));
 	version_msg((char *)compiler_version);
 	version_msg("\n");
     }
-#endif
+# endif
     version_msg(_("Linking: "));
     version_msg((char *)all_lflags);
 #endif
@@ -1421,21 +1702,30 @@ intro_message(
     char	*p;
     static char	*(lines[]) =
     {
-	N_("VIM - Vi IMproved"),
+	N_("UTCS VIM - Vi Improved 9.2"),
+	N_("Spring 2026 Release"),
+	N_("VIM version "),
+	N_("UTCS Version 1.0"),
 	"",
-	N_("version "),
-	N_("by Bram Moolenaar et al."),
+	N_("by Abdon Morales"),
+	N_("The University of Texas at Austin"),
+	N_("The Department of Computer Science"),
+	"",
 #ifdef MODIFIED_BY
 	" ",
 #endif
 	N_("Vim is open source and freely distributable"),
 	"",
 	N_("Help poor children in Uganda!"),
-	N_("type  :help iccf<Enter>       for information "),
+	N_("type  :help Kuwasha<Enter>    for information "),
+	N_("For UT CS students, don't forget the basic Vim commands:"),
 	"",
-	N_("type  :q<Enter>               to exit         "),
-	N_("type  :help<Enter>  or  <F1>  for on-line help"),
-	N_("type  :help version9<Enter>   for version info"),
+	N_("type  (:q or :q!)<Enter>      to exit                 "),
+	N_("type  i                       to insert text          "),
+	N_("type  <Esc>                   to return to normal mode"),
+	N_("type  :w<Enter>               to save changes         "),
+	N_("type  :help<Enter>  or  <F1>  for on-line help        "),
+	N_("type  :help version9<Enter>   for version info        "),
 	NULL,
 	"",
 	N_("Running in Vi compatible mode"),
@@ -1449,9 +1739,9 @@ intro_message(
 	NULL,
 	NULL,
 	NULL,
-#ifdef MODIFIED_BY
+# ifdef MODIFIED_BY
 	NULL,
-#endif
+# endif
 	NULL,
 	NULL,
 	NULL,
@@ -1479,14 +1769,13 @@ intro_message(
     if (blanklines < 0)
 	blanklines = 0;
 
-    // Show the sponsor and register message one out of four times, the Uganda
-    // message two out of four times.
+    // Show the sponsor and Uganda message two out of four times
     sponsor = (int)time(NULL);
     sponsor = ((sponsor & 2) == 0) - ((sponsor & 4) == 0);
 
     // start displaying the message lines after half of the blank lines
     row = blanklines / 2;
-    if ((row >= 2 && Columns >= 50) || colon)
+    if ((row >= 2 && topframe->fr_width >= 50) || colon)
     {
 	for (i = 0; i < (int)ARRAY_LENGTH(lines); ++i)
 	{
@@ -1504,15 +1793,11 @@ intro_message(
 	    if (sponsor != 0)
 	    {
 		if (strstr(p, "children") != NULL)
-		    p = sponsor < 0
-			? N_("Sponsor Vim development!")
-			: N_("Become a registered Vim user!");
-		else if (strstr(p, "iccf") != NULL)
-		    p = sponsor < 0
-			? N_("type  :help sponsor<Enter>    for information ")
-			: N_("type  :help register<Enter>   for information ");
+		    p = N_("Sponsor Vim development!");
+		else if (strstr(p, "Kuwasha") != NULL)
+		    p = N_("type  :help sponsor<Enter>    for information ");
 		else if (strstr(p, "Orphans") != NULL)
-		    p = N_("menu  Help->Sponsor/Register  for information    ");
+		    p = N_("menu  Help->Sponsor           for information    ");
 	    }
 	    if (*p != NUL)
 		do_intro_line(row, (char_u *)_(p), i == 2, 0);
@@ -1569,7 +1854,7 @@ do_intro_line(
 	}
 	col += (int)STRLEN(vers);
     }
-    col = (Columns - col) / 2;
+    col = (topframe->fr_width - col) / 2;
     if (col < 0)
 	col = 0;
 
@@ -1588,13 +1873,14 @@ do_intro_line(
 	    else
 		clen += byte2cells(p[l]);
 	}
-	screen_puts_len(p, l, row, col, *p == '<' ? HL_ATTR(HLF_8) : attr);
+	screen_puts_len(p, l, row, col + firstwin->w_wincol,
+		*p == '<' ? HL_ATTR(HLF_8) : attr);
 	col += clen;
     }
 
     // Add the version number to the version line.
     if (add_version)
-	screen_puts(vers, row, col, 0);
+	screen_puts(vers, row, col + firstwin->w_wincol, 0);
 }
 
 /*
@@ -1604,6 +1890,9 @@ do_intro_line(
 ex_intro(exarg_T *eap UNUSED)
 {
     screenclear();
+#if defined(FEAT_TABPANEL)
+    draw_tabpanel();
+#endif
     intro_message(TRUE);
     wait_return(TRUE);
 }

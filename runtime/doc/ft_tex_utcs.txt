@@ -1,0 +1,159 @@
+*ft_tex_utcs.txt*	UTCS LaTeX compile and view support
+
+			UTCS VIM - LaTeX Support
+		   The University of Texas at Austin
+		   Department of Computer Science
+
+==============================================================================
+CONTENTS						*tex-utcs*
+
+1. Introduction					|tex-utcs-intro|
+2. Commands					|tex-utcs-commands|
+3. Mappings					|tex-utcs-mappings|
+4. Settings					|tex-utcs-settings|
+5. Multi-file projects				|tex-utcs-multifile|
+6. Error handling				|tex-utcs-errors|
+
+==============================================================================
+1. INTRODUCTION						*tex-utcs-intro*
+
+The UTCS LaTeX plugin provides basic LaTeX compiling and PDF viewing directly
+from Vim.  It is automatically loaded when editing `.tex` files.
+
+Features:
+- Compile `.tex` files with pdflatex (or any configurable compiler)
+- Full build cycle: pdflatex + bibtex + pdflatex x2
+- Open the compiled PDF in your system viewer
+- Clean auxiliary files (.aux, .log, .toc, etc.)
+- Error parsing into the |quickfix| list with file and line info
+- Support for multi-file projects via magic comments
+- Spell checking and conceal enabled by default for LaTeX buffers
+
+==============================================================================
+2. COMMANDS						*tex-utcs-commands*
+
+							*:TexCompile*
+:TexCompile		Saves the current buffer and compiles the `.tex` file
+			using the configured compiler (default: pdflatex).
+			If compilation fails, errors are parsed and loaded
+			into the |quickfix| list.  The quickfix window opens
+			automatically on failure and closes on success.
+
+							*:TexCompileFull*
+:TexCompileFull		Performs a full compilation cycle:
+			  1. pdflatex (first pass)
+			  2. bibtex (process bibliography)
+			  3. pdflatex (resolve references)
+			  4. pdflatex (final pass)
+			This is needed when you have citations, cross-
+			references, or a table of contents that need multiple
+			passes to resolve correctly.
+
+							*:TexView*
+:TexView		Opens the compiled PDF file in the system PDF viewer.
+			On macOS this uses `open`, on Linux `xdg-open`, and
+			on Windows `start`.  Prints a warning if the PDF does
+			not exist yet.
+
+							*:TexClean*
+:TexClean		Removes auxiliary files generated during compilation.
+			The following extensions are cleaned by default:
+			  .aux .log .toc .lof .lot .out .bbl .blg .idx
+			  .ilg .ind .nav .snm .vrb .fls .fdb_latexmk
+			  .synctex.gz .bcf .run.xml
+			See |g:tex_clean_extensions| to customize.
+
+==============================================================================
+3. MAPPINGS						*tex-utcs-mappings*
+
+The following buffer-local mappings are defined in Normal mode.
+All use <Leader>l as a prefix (default leader is backslash).
+
+	<Leader>ll	Compile (same as |:TexCompile|)
+	<Leader>lf	Full compile (same as |:TexCompileFull|)
+	<Leader>lv	View PDF (same as |:TexView|)
+	<Leader>lc	Clean auxiliary files (same as |:TexClean|)
+
+These mappings use <Plug> so they can be remapped.  Example: >
+	nmap <buffer> <F5> <Plug>TexCompile
+	nmap <buffer> <F6> <Plug>TexView
+<
+
+==============================================================================
+4. SETTINGS						*tex-utcs-settings*
+
+These variables can be set in your |vimrc| to override the defaults.
+
+							*g:tex_compiler*
+g:tex_compiler		The LaTeX compiler command.
+			Default: "pdflatex"
+			Example: >
+			    let g:tex_compiler = 'xelatex'
+			    let g:tex_compiler = 'lualatex'
+<
+
+							*g:tex_compiler_flags*
+g:tex_compiler_flags	Flags passed to the compiler.
+			Default: "-interaction=nonstopmode
+				  -file-line-error -synctex=1"
+			Example: >
+			    let g:tex_compiler_flags = '-interaction=nonstopmode'
+<
+
+							*g:tex_bibtex*
+g:tex_bibtex		The bibliography processor command.
+			Default: "bibtex"
+			Example: >
+			    let g:tex_bibtex = 'biber'
+<
+
+							*g:tex_viewer*
+g:tex_viewer		The PDF viewer command.
+			Default: "open" (macOS), "xdg-open" (Linux),
+				 "start" (Windows)
+			Example: >
+			    let g:tex_viewer = 'zathura'
+			    let g:tex_viewer = 'evince'
+<
+
+							*g:tex_clean_extensions*
+g:tex_clean_extensions	List of file extensions to remove with |:TexClean|.
+			Default: ['aux', 'log', 'toc', 'lof', 'lot', 'out',
+				  'bbl', 'blg', 'idx', 'ilg', 'ind', 'nav',
+				  'snm', 'vrb', 'fls', 'fdb_latexmk',
+				  'synctex.gz', 'bcf', 'run.xml']
+			Example: >
+			    let g:tex_clean_extensions = ['aux', 'log', 'toc']
+<
+
+==============================================================================
+5. MULTI-FILE PROJECTS					*tex-utcs-multifile*
+
+For projects with multiple `.tex` files (e.g., chapters included via
+\input{} or \include{}), add a magic comment to the first 10 lines of
+each sub-file to point to the root document: >
+
+	% !TEX root = main.tex
+	% !TEX root = ../thesis.tex
+<
+When this comment is present, all compile and view commands operate on
+the root file instead of the current buffer.
+
+==============================================================================
+6. ERROR HANDLING					*tex-utcs-errors*
+
+When compilation fails, the plugin parses the pdflatex output and loads
+errors into the |quickfix| list.  Use standard quickfix commands to
+navigate:
+
+	:copen		Open the quickfix window
+	:cnext		Jump to the next error
+	:cprev		Jump to the previous error
+	:cclose		Close the quickfix window
+
+The error format expects the standard LaTeX "file:line: message" format,
+which is enabled by the `-file-line-error` compiler flag.
+
+==============================================================================
+
+ vim:tw=78:ts=8:noet:ft=help:norl:

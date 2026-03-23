@@ -89,7 +89,7 @@ alist_new(void)
     }
 }
 
-#if !defined(UNIX) || defined(PROTO)
+#if !defined(UNIX)
 /*
  * Expand the file names in the global argument list.
  * If "fnum_list" is not NULL, use "fnum_list[fnum_len]" as a list of buffer
@@ -184,6 +184,8 @@ alist_set(
 /*
  * Add file "fname" to argument list "al".
  * "fname" must have been allocated and "al" must have been checked for room.
+ *
+ * May trigger Buf* autocommands
  */
     void
 alist_add(
@@ -191,11 +193,14 @@ alist_add(
     char_u	*fname,
     int		set_fnum)	// 1: set buffer number; 2: re-use curbuf
 {
+    win_T	*wp = curwin;
+
     if (fname == NULL)		// don't add NULL file names
 	return;
     if (check_arglist_locked() == FAIL)
 	return;
     arglist_locked = TRUE;
+    wp->w_locked = TRUE;
 
 #ifdef BACKSLASH_IN_FILENAME
     slash_adjust(fname);
@@ -207,9 +212,10 @@ alist_add(
     ++al->al_ga.ga_len;
 
     arglist_locked = FALSE;
+    wp->w_locked = FALSE;
 }
 
-#if defined(BACKSLASH_IN_FILENAME) || defined(PROTO)
+#if defined(BACKSLASH_IN_FILENAME)
 /*
  * Adjust slashes in file names.  Called after 'shellslash' was set.
  */
@@ -295,7 +301,7 @@ get_arglist(garray_T *gap, char_u *str, int escaped)
     return OK;
 }
 
-#if defined(FEAT_QUICKFIX) || defined(FEAT_SYN_HL) || defined(FEAT_SPELL) || defined(PROTO)
+#if defined(FEAT_QUICKFIX) || defined(FEAT_SYN_HL) || defined(FEAT_SPELL)
 /*
  * Parse a list of arguments (file names), expand them and return in
  * "fnames[fcountp]".  When "wig" is TRUE, removes files matching 'wildignore'.
@@ -357,6 +363,8 @@ alist_add_list(
     if (check_arglist_locked() != FAIL
 	    && GA_GROW_OK(&ALIST(curwin)->al_ga, count))
     {
+	win_T	*wp = curwin;
+
 	if (after < 0)
 	    after = 0;
 	if (after > ARGCOUNT)
@@ -365,6 +373,7 @@ alist_add_list(
 	    mch_memmove(&(ARGLIST[after + count]), &(ARGLIST[after]),
 				       (ARGCOUNT - after) * sizeof(aentry_T));
 	arglist_locked = TRUE;
+	wp->w_locked = TRUE;
 	for (i = 0; i < count; ++i)
 	{
 	    int flags = BLN_LISTED | (will_edit ? BLN_CURBUF : 0);
@@ -373,9 +382,10 @@ alist_add_list(
 	    ARGLIST[after + i].ae_fnum = buflist_add(files[i], flags);
 	}
 	arglist_locked = FALSE;
-	ALIST(curwin)->al_ga.ga_len += count;
-	if (old_argcount > 0 && curwin->w_arg_idx >= after)
-	    curwin->w_arg_idx += count;
+	wp->w_locked = FALSE;
+	ALIST(wp)->al_ga.ga_len += count;
+	if (old_argcount > 0 && wp->w_arg_idx >= after)
+	    wp->w_arg_idx += count;
 	return;
     }
 
@@ -555,7 +565,7 @@ check_arg_idx(win_T *win)
 }
 
 /*
- * ":args", ":argslocal" and ":argsglobal".
+ * ":args", ":arglocal" and ":argglobal".
  */
     void
 ex_args(exarg_T *eap)
@@ -682,6 +692,7 @@ do_argfile(exarg_T *eap, int argn)
     int		other;
     char_u	*p;
     int		old_arg_idx = curwin->w_arg_idx;
+    int is_split_cmd = *eap->cmd == 's';
 
     if (ERROR_IF_ANY_POPUP_WINDOW)
 	return;
@@ -697,13 +708,18 @@ do_argfile(exarg_T *eap, int argn)
 	return;
     }
 
+    if (!is_split_cmd
+	    && (&ARGLIST[argn])->ae_fnum != curbuf->b_fnum
+	    && !check_can_set_curbuf_forceit(eap->forceit))
+	return;
+
     setpcmark();
 #ifdef FEAT_GUI
     need_mouse_correct = TRUE;
 #endif
 
     // split window or create new tab page first
-    if (*eap->cmd == 's' || cmdmod.cmod_tab != 0)
+    if (is_split_cmd || cmdmod.cmod_tab != 0)
     {
 	if (win_split(0, 0) == FAIL)
 	    return;
@@ -995,7 +1011,7 @@ arg_all_close_unused_windows(arg_all_state_T *aall)
 	    buf = wp->w_buffer;
 	    if (buf->b_ffname == NULL
 		    || (!aall->keep_tabs && (buf->b_nwindows > 1
-			    || wp->w_width != Columns)))
+			    || wp->w_width != cmdline_width)))
 		i = aall->opened_len;
 	    else
 	    {
@@ -1246,6 +1262,10 @@ do_arg_all(
 
     tabpage_T *new_lu_tp = curtab;
 
+    // Stop Visual mode, the cursor and "VIsual" may very well be invalid after
+    // switching to another buffer.
+    reset_VIsual_and_resel();
+
     // Try closing all windows that are not in the argument list.
     // Also close windows that are not full width;
     // When 'hidden' or "forceit" set the buffer becomes hidden.
@@ -1378,7 +1398,7 @@ arg_all(void)
     return retval;
 }
 
-#if defined(FEAT_EVAL) || defined(PROTO)
+#if defined(FEAT_EVAL)
 /*
  * "argc([window id])" function
  */

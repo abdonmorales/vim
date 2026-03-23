@@ -239,15 +239,9 @@
 
 #include "vim.h"
 
-#if defined(FEAT_SPELL) || defined(PROTO)
+#if defined(FEAT_SPELL)
 
-#ifndef UNIX		// it's in os_unix.h for Unix
-# include <time.h>	// for time_t
-#endif
-
-#ifndef UNIX		// it's in os_unix.h for Unix
-# include <time.h>	// for time_t
-#endif
+#include <time.h>	// for time_t
 
 // Special byte values for <byte>.  Some are only used in the tree for
 // postponed prefixes, some only in the other trees.  This is a bit messy...
@@ -2085,10 +2079,10 @@ spell_check_msm(void)
  * compressing the tree.
  * Based on code from Olaf Seibert.
  */
-#define PRINTLINESIZE	1000
-#define PRINTWIDTH	6
+# define PRINTLINESIZE	1000
+# define PRINTWIDTH	6
 
-#define PRINTSOME(l, depth, fmt, a1, a2) vim_snprintf(l + depth * PRINTWIDTH, \
+# define PRINTSOME(l, depth, fmt, a1, a2) vim_snprintf(l + depth * PRINTWIDTH, \
 	    PRINTLINESIZE - PRINTWIDTH * depth, fmt, a1, a2)
 
 static char line1[PRINTLINESIZE];
@@ -5877,7 +5871,7 @@ sug_write(spellinfo_T *spin, char_u *fname)
     {
 	// <sugline>: <sugnr> ... NUL
 	line = ml_get_buf(spin->si_spellbuf, lnum, FALSE);
-	len = (int)STRLEN(line) + 1;
+	len = ml_get_buf_len(spin->si_spellbuf, lnum) + 1;
 	if (fwrite(line, (size_t)len, (size_t)1, fd) == 0)
 	{
 	    emsg(_(e_error_while_writing));
@@ -6383,8 +6377,7 @@ spell_add_word(
     static void
 init_spellfile(void)
 {
-    char_u	*buf;
-    int		l;
+    string_T	buf;
     char_u	*fname;
     char_u	*rtp;
     char_u	*lend;
@@ -6394,9 +6387,11 @@ init_spellfile(void)
     if (*curwin->w_s->b_p_spl == NUL || curwin->w_s->b_langp.ga_len <= 0)
 	return;
 
-    buf = alloc(MAXPATHL);
-    if (buf == NULL)
+    buf.string = alloc(MAXPATHL);
+    if (buf.string == NULL)
 	return;
+
+    buf.length = 0;
 
     // Find the end of the language name.  Exclude the region.  If there
     // is a path separator remember the start of the tail.
@@ -6416,45 +6411,51 @@ init_spellfile(void)
 	if (aspath)
 	    // Use directory of an entry with path, e.g., for
 	    // "/dir/lg.utf-8.spl" use "/dir".
-	    vim_strncpy(buf, curbuf->b_s.b_p_spl,
+	    vim_strncpy(buf.string, curbuf->b_s.b_p_spl,
 		    lstart - curbuf->b_s.b_p_spl - 1);
 	else
 	    // Copy the path from 'runtimepath' to buf[].
-	    copy_option_part(&rtp, buf, MAXPATHL, ",");
-	if (filewritable(buf) == 2)
+	    buf.length = (size_t)copy_option_part(&rtp, buf.string, MAXPATHL, ",");
+	if (filewritable(buf.string) == 2)
 	{
 	    // Use the first language name from 'spelllang' and the
 	    // encoding used in the first loaded .spl file.
 	    if (aspath)
-		vim_strncpy(buf, curbuf->b_s.b_p_spl,
-			lend - curbuf->b_s.b_p_spl);
+	    {
+		buf.length = (size_t)(lend - curbuf->b_s.b_p_spl);
+		vim_strncpy(buf.string, curbuf->b_s.b_p_spl, buf.length);
+	    }
 	    else
 	    {
 		// Create the "spell" directory if it doesn't exist yet.
-		l = (int)STRLEN(buf);
-		vim_snprintf((char *)buf + l, MAXPATHL - l, "/spell");
-		if (filewritable(buf) != 2)
-		    vim_mkdir(buf, 0755);
+		buf.length += vim_snprintf_safelen((char *)buf.string + buf.length,
+		    MAXPATHL - buf.length, "/spell");
+		if (filewritable(buf.string) != 2)
+		{
+		    if (vim_mkdir(buf.string, 0755) != 0)
+		    {
+			vim_free(buf.string);
+			return;
+		    }
+		}
 
-		l = (int)STRLEN(buf);
-		vim_snprintf((char *)buf + l, MAXPATHL - l,
-			"/%.*s", (int)(lend - lstart), lstart);
+		buf.length += vim_snprintf_safelen((char *)buf.string + buf.length,
+		    MAXPATHL - buf.length, "/%.*s", (int)(lend - lstart), lstart);
 	    }
-	    l = (int)STRLEN(buf);
 	    fname = LANGP_ENTRY(curwin->w_s->b_langp, 0)
 		->lp_slang->sl_fname;
-	    vim_snprintf((char *)buf + l, MAXPATHL - l, ".%s.add",
-		    fname != NULL
-		    && strstr((char *)gettail(fname), ".ascii.") != NULL
+	    vim_snprintf((char *)buf.string + buf.length, MAXPATHL - buf.length,
+		".%s.add",
+		fname != NULL && strstr((char *)gettail(fname), ".ascii.") != NULL
 		    ? (char_u *)"ascii" : spell_enc());
 	    set_option_value_give_err((char_u *)"spellfile",
-		    0L, buf, OPT_LOCAL);
+		    0L, buf.string, OPT_LOCAL);
 	    break;
 	}
 	aspath = FALSE;
     }
 
-    vim_free(buf);
+    vim_free(buf.string);
 }
 
 

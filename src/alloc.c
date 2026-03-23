@@ -17,7 +17,7 @@
  * Various routines dealing with allocation and deallocation of memory.
  */
 
-#if defined(MEM_PROFILE) || defined(PROTO)
+#if defined(MEM_PROFILE)
 
 # define MEM_SIZES  8200
 static long_u mem_allocs[MEM_SIZES];
@@ -151,7 +151,7 @@ alloc(size_t size)
     return lalloc(size, TRUE);
 }
 
-#if defined(FEAT_QUICKFIX) || defined(PROTO)
+#if defined(FEAT_QUICKFIX)
 /*
  * alloc() with an ID for alloc_fail().
  */
@@ -293,19 +293,19 @@ theend:
 /*
  * lalloc() with an ID for alloc_fail().
  */
-#if defined(FEAT_SIGNS) || defined(PROTO)
+#if defined(FEAT_SIGNS)
     void *
 lalloc_id(size_t size, int message, alloc_id_T id UNUSED)
 {
-#ifdef FEAT_EVAL
+# ifdef FEAT_EVAL
     if (alloc_fail_id == id && alloc_does_fail(size))
 	return NULL;
-#endif
+# endif
     return (lalloc(size, message));
 }
 #endif
 
-#if defined(MEM_PROFILE) || defined(PROTO)
+#if defined(MEM_PROFILE)
 /*
  * realloc() with memory profiling.
  */
@@ -314,7 +314,10 @@ mem_realloc(void *ptr, size_t size)
 {
     void *p;
 
-    mem_pre_free(&ptr);
+    // When ptr is NULL, realloc() behaves like malloc().  Don't call
+    // mem_pre_free() in that case as it would dereference before the pointer.
+    if (ptr != NULL)
+	mem_pre_free(&ptr);
     mem_pre_alloc_s(&size);
 
     p = realloc(ptr, size);
@@ -350,7 +353,7 @@ do_outofmem_msg(size_t size)
 	mch_exit(123);
 }
 
-#if defined(EXITFREE) || defined(PROTO)
+#if defined(EXITFREE)
 
 /*
  * Free everything that we allocated.
@@ -510,7 +513,6 @@ free_all_mem(void)
     // Clear registers.
     clear_registers();
     ResetRedobuff();
-    ResetRedobuff();
 
 # if defined(FEAT_CLIENTSERVER) && defined(FEAT_X11)
     vim_free(serverDelayedStartName);
@@ -645,7 +647,7 @@ ga_clear_strings(garray_T *gap)
     ga_clear(gap);
 }
 
-#if defined(FEAT_EVAL) || defined(PROTO)
+#if defined(FEAT_EVAL)
 /*
  * Copy a growing array that contains a list of strings.
  */
@@ -733,6 +735,7 @@ ga_grow_inner(garray_T *gap, int n)
 {
     size_t	old_len;
     size_t	new_len;
+    size_t	new_count;
     char_u	*pp;
 
     if (n < gap->ga_growsize)
@@ -744,7 +747,11 @@ ga_grow_inner(garray_T *gap, int n)
     if (n < gap->ga_len / 2)
 	n = gap->ga_len / 2;
 
-    new_len = (size_t)gap->ga_itemsize * (gap->ga_len + n);
+    new_count = (size_t)gap->ga_len + (size_t)n;
+    new_len = (size_t)gap->ga_itemsize * new_count;
+    // Overflow check: ensure the multiplication did not wrap around.
+    if (new_count != 0 && new_len / new_count != (size_t)gap->ga_itemsize)
+	return FAIL;
     pp = vim_realloc(gap->ga_data, new_len);
     if (pp == NULL)
 	return FAIL;
@@ -770,7 +777,10 @@ ga_concat_strings(garray_T *gap, char *sep)
     char_u	*p;
 
     for (i = 0; i < gap->ga_len; ++i)
-	len += (int)STRLEN(((char_u **)(gap->ga_data))[i]) + sep_len;
+	len += (int)STRLEN(((char_u **)(gap->ga_data))[i]);
+
+    if (gap->ga_len > 1)
+	len += (gap->ga_len - 1) * sep_len;
 
     s = alloc(len + 1);
     if (s == NULL)
@@ -874,8 +884,7 @@ ga_append(garray_T *gap, int c)
     return OK;
 }
 
-#if (defined(UNIX) && !defined(USE_SYSTEM)) || defined(MSWIN) \
-	|| defined(PROTO)
+#if (defined(UNIX) && !defined(USE_SYSTEM)) || defined(MSWIN)
 /*
  * Append the text in "gap" below the cursor line and clear "gap".
  */

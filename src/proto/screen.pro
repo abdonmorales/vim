@@ -1,13 +1,13 @@
 /* screen.c */
 int conceal_cursor_line(win_T *wp);
 void conceal_check_cursor_line(int was_concealed);
-int get_wcr_attr(win_T *wp);
+int get_win_attr(win_T *wp);
 void win_draw_end(win_T *wp, int c1, int c2, int draw_margin, int row, int endrow, hlf_T hl);
 int compute_foldcolumn(win_T *wp, int col);
 size_t fill_foldcolumn(char_u *p, win_T *wp, int closed, linenr_T lnum);
 int screen_get_current_line_off(void);
 void reset_screen_attr(void);
-void screen_line(win_T *wp, int row, int coloff, int endcol, int clear_width, int flags);
+void screen_line(win_T *wp, int row, int coloff, int endcol, int clear_width, colnr_T last_vcol, int flags);
 void rl_mirror(char_u *str);
 void draw_vsep_win(win_T *wp, int row);
 int stl_connected(win_T *wp);

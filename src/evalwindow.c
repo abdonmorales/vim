@@ -13,7 +13,7 @@
 
 #include "vim.h"
 
-#if defined(FEAT_EVAL) || defined(PROTO)
+#if defined(FEAT_EVAL)
 
     static int
 win_getid(typval_T *argvars)
@@ -104,10 +104,10 @@ win_id2wp_tp(int id, tabpage_T **tpp)
 		*tpp = tp;
 	    return wp;
 	}
-#ifdef FEAT_PROP_POPUP
+# ifdef FEAT_PROP_POPUP
     // popup windows are in separate lists
-     FOR_ALL_TABPAGES(tp)
-	 FOR_ALL_POPUPWINS_IN_TAB(tp, wp)
+    FOR_ALL_TABPAGES(tp)
+	FOR_ALL_POPUPWINS_IN_TAB(tp, wp)
 	     if (wp->w_id == id)
 	     {
 		 if (tpp != NULL)
@@ -121,7 +121,7 @@ win_id2wp_tp(int id, tabpage_T **tpp)
 		*tpp = curtab;  // any tabpage would do
 	    return wp;
 	}
-#endif
+# endif
 
     return NULL;
 }
@@ -184,7 +184,7 @@ find_win_by_nr(
     }
     if (nr >= LOWEST_WIN_ID)
     {
-#ifdef FEAT_PROP_POPUP
+# ifdef FEAT_PROP_POPUP
 	// check tab-local popup windows
 	for (wp = (tp == NULL ? curtab : tp)->tp_first_popupwin;
 						   wp != NULL; wp = wp->w_next)
@@ -194,7 +194,7 @@ find_win_by_nr(
 	FOR_ALL_POPUPWINS(wp)
 	    if (wp->w_id == nr)
 		return wp;
-#endif
+# endif
 	return NULL;
     }
     return wp;
@@ -293,14 +293,16 @@ get_framelayout(frame_T *fr, list_T *l, int outer)
     {
 	if (fr->fr_win != NULL)
 	{
-	    list_append_string(fr_list, (char_u *)"leaf", -1);
+	    list_append_string(fr_list, (char_u *)"leaf", STRLEN_LITERAL("leaf"));
 	    list_append_number(fr_list, fr->fr_win->w_id);
 	}
     }
     else
     {
-	list_append_string(fr_list,
-	     fr->fr_layout == FR_ROW ?  (char_u *)"row" : (char_u *)"col", -1);
+	if (fr->fr_layout == FR_ROW)
+	    list_append_string(fr_list, (char_u *)"row", STRLEN_LITERAL("row"));
+	else
+	    list_append_string(fr_list, (char_u *)"col", STRLEN_LITERAL("col"));
 
 	win_list = list_alloc();
 	if (win_list == NULL)
@@ -416,25 +418,27 @@ get_win_info(win_T *wp, short tpnr, short winnr)
     dict_add_number(dict, "winnr", winnr);
     dict_add_number(dict, "winid", wp->w_id);
     dict_add_number(dict, "height", wp->w_height);
+    dict_add_number(dict, "status_height", wp->w_status_height);
     dict_add_number(dict, "winrow", wp->w_winrow + 1);
     dict_add_number(dict, "topline", wp->w_topline);
     dict_add_number(dict, "botline", wp->w_botline - 1);
-#ifdef FEAT_MENU
+# ifdef FEAT_MENU
     dict_add_number(dict, "winbar", wp->w_winbar_height);
-#endif
+# endif
     dict_add_number(dict, "width", wp->w_width);
     dict_add_number(dict, "wincol", wp->w_wincol + 1);
     dict_add_number(dict, "textoff", win_col_off(wp));
     dict_add_number(dict, "bufnr", wp->w_buffer->b_fnum);
+    dict_add_number(dict, "leftcol", wp->w_leftcol);
 
-#ifdef FEAT_TERMINAL
+# ifdef FEAT_TERMINAL
     dict_add_number(dict, "terminal", bt_terminal(wp->w_buffer));
-#endif
-#ifdef FEAT_QUICKFIX
+# endif
+# ifdef FEAT_QUICKFIX
     dict_add_number(dict, "quickfix", bt_quickfix(wp->w_buffer));
     dict_add_number(dict, "loclist",
 		      (bt_quickfix(wp->w_buffer) && wp->w_llist_ref != NULL));
-#endif
+# endif
 
     // Add a reference to window variables
     dict_add_dict(dict, "variables", wp->w_vars);
@@ -554,7 +558,7 @@ f_getwininfo(typval_T *argvars, typval_T *rettv)
 		return;
 	}
     }
-#ifdef FEAT_PROP_POPUP
+# ifdef FEAT_PROP_POPUP
     if (wparg != NULL)
     {
 	tabnr = 0;
@@ -562,14 +566,15 @@ f_getwininfo(typval_T *argvars, typval_T *rettv)
 	{
 	    tabnr++;
 	    FOR_ALL_POPUPWINS_IN_TAB(tp, wp)
-	    if (wp == wparg)
-		break;
+		if (wp == wparg)
+		    goto found;
 	}
+found:
 	d = get_win_info(wparg, tp == NULL ? 0 : tabnr, 0);
 	if (d != NULL)
 	    list_append_dict(rettv->vval.v_list, d);
     }
-#endif
+# endif
 }
 
 /*
@@ -587,7 +592,7 @@ f_getwinpos(typval_T *argvars UNUSED, typval_T *rettv)
     if (in_vim9script() && check_for_opt_number_arg(argvars, 0) == FAIL)
 	return;
 
-#if defined(FEAT_GUI) \
+# if defined(FEAT_GUI) \
 	|| (defined(HAVE_TGETENT) && defined(FEAT_TERMRESPONSE)) \
 	|| defined(MSWIN)
     {
@@ -598,7 +603,7 @@ f_getwinpos(typval_T *argvars UNUSED, typval_T *rettv)
 
 	(void)ui_get_winpos(&x, &y, timeout);
     }
-#endif
+# endif
     list_append_number(rettv->vval.v_list, (varnumber_T)x);
     list_append_number(rettv->vval.v_list, (varnumber_T)y);
 }
@@ -611,7 +616,7 @@ f_getwinpos(typval_T *argvars UNUSED, typval_T *rettv)
 f_getwinposx(typval_T *argvars UNUSED, typval_T *rettv)
 {
     rettv->vval.v_number = -1;
-#if defined(FEAT_GUI) \
+# if defined(FEAT_GUI) \
 	|| (defined(HAVE_TGETENT) && defined(FEAT_TERMRESPONSE)) \
 	|| defined(MSWIN)
 
@@ -621,7 +626,7 @@ f_getwinposx(typval_T *argvars UNUSED, typval_T *rettv)
 	if (ui_get_winpos(&x, &y, 100) == OK)
 	    rettv->vval.v_number = x;
     }
-#endif
+# endif
 }
 
 /*
@@ -631,7 +636,7 @@ f_getwinposx(typval_T *argvars UNUSED, typval_T *rettv)
 f_getwinposy(typval_T *argvars UNUSED, typval_T *rettv)
 {
     rettv->vval.v_number = -1;
-#if defined(FEAT_GUI) \
+# if defined(FEAT_GUI) \
 	|| (defined(HAVE_TGETENT) && defined(FEAT_TERMRESPONSE)) \
 	|| defined(MSWIN)
     {
@@ -640,7 +645,7 @@ f_getwinposy(typval_T *argvars UNUSED, typval_T *rettv)
 	if (ui_get_winpos(&x, &y, 100) == OK)
 	    rettv->vval.v_number = y;
     }
-#endif
+# endif
 }
 
 /*
@@ -726,10 +731,11 @@ f_win_execute(typval_T *argvars, typval_T *rettv)
     pos_T	curpos = wp->w_cursor;
     char_u	cwd[MAXPATHL];
     int	cwd_status = FAIL;
-#ifdef FEAT_AUTOCHDIR
+# ifdef FEAT_AUTOCHDIR
     char_u	autocwd[MAXPATHL];
     int	apply_acd = FALSE;
-#endif
+    char_u	*save_sfname = NULL;
+# endif
 
     // Getting and setting directory can be slow on some systems, only do
     // this when the current or target window/tab have a local directory or
@@ -740,22 +746,24 @@ f_win_execute(typval_T *argvars, typval_T *rettv)
 		|| (curtab != tp
 		    && (curtab->tp_localdir != NULL
 			|| tp->tp_localdir != NULL))
-#ifdef FEAT_AUTOCHDIR
+# ifdef FEAT_AUTOCHDIR
 		|| p_acd
-#endif
+# endif
 	       ))
 	cwd_status = mch_dirname(cwd, MAXPATHL);
 
-#ifdef FEAT_AUTOCHDIR
+# ifdef FEAT_AUTOCHDIR
     // If 'acd' is set, check we are using that directory.  If yes, then
     // apply 'acd' afterwards, otherwise restore the current directory.
     if (cwd_status == OK && p_acd)
     {
+	if (curbuf->b_sfname != NULL && curbuf->b_fname == curbuf->b_sfname)
+	    save_sfname = vim_strsave(curbuf->b_sfname);
 	do_autochdir();
 	apply_acd = mch_dirname(autocwd, MAXPATHL) == OK
 	    && STRCMP(cwd, autocwd) == 0;
     }
-#endif
+# endif
 
     if (switch_win_noblock(&switchwin, wp, tp, TRUE) == OK)
     {
@@ -763,13 +771,26 @@ f_win_execute(typval_T *argvars, typval_T *rettv)
 	execute_common(argvars, rettv, 1);
     }
     restore_win_noblock(&switchwin, TRUE);
-#ifdef FEAT_AUTOCHDIR
+# ifdef FEAT_AUTOCHDIR
     if (apply_acd)
+    {
+	vim_free(save_sfname);
 	do_autochdir();
+    }
     else
-#endif
+# endif
 	if (cwd_status == OK)
+	{
 	    mch_chdir((char *)cwd);
+# ifdef FEAT_AUTOCHDIR
+	    if (save_sfname != NULL)
+	    {
+		vim_free(curbuf->b_sfname);
+		curbuf->b_sfname = save_sfname;
+		curbuf->b_fname = curbuf->b_sfname;
+	    }
+# endif
+	}
 
     // Update the status line if the cursor moved.
     if (win_valid(wp) && !EQUAL_POS(curpos, wp->w_cursor))
@@ -824,15 +845,22 @@ f_win_gotoid(typval_T *argvars, typval_T *rettv)
 	return;
 
     id = tv_get_number(&argvars[0]);
+    if (curwin->w_id == id)
+    {
+	// Nothing to do.
+	rettv->vval.v_number = 1;
+	return;
+    }
+
     if (text_or_buf_locked())
 	return;
-#if defined(FEAT_PROP_POPUP) && defined(FEAT_TERMINAL)
+# if defined(FEAT_PROP_POPUP) && defined(FEAT_TERMINAL)
     if (popup_is_popup(curwin) && curbuf->b_term != NULL)
     {
 	emsg(_(e_not_allowed_for_terminal_in_popup_window));
 	return;
     }
-#endif
+# endif
     FOR_ALL_TAB_WINDOWS(tp, wp)
 	if (wp->w_id == id)
 	{
@@ -994,8 +1022,8 @@ f_win_splitmove(typval_T *argvars, typval_T *rettv)
 	size = (int)dict_get_number(d, "size");
     }
 
-    // Check if we can split the target before we bother switching windows.
-    if (text_or_buf_locked() || check_split_disallowed(targetwin) == FAIL)
+    // Check if we're allowed to continue before we bother switching windows.
+    if (text_or_buf_locked() || check_split_disallowed(wp) == FAIL)
 	return;
 
     if (curwin != targetwin)
@@ -1039,21 +1067,21 @@ f_win_gettype(typval_T *argvars, typval_T *rettv)
     }
     if (is_aucmd_win(wp))
 	rettv->vval.v_string = vim_strsave((char_u *)"autocmd");
-#if defined(FEAT_QUICKFIX)
+# if defined(FEAT_QUICKFIX)
     else if (wp->w_p_pvw)
 	rettv->vval.v_string = vim_strsave((char_u *)"preview");
-#endif
-#ifdef FEAT_PROP_POPUP
+# endif
+# ifdef FEAT_PROP_POPUP
     else if (WIN_IS_POPUP(wp))
 	rettv->vval.v_string = vim_strsave((char_u *)"popup");
-#endif
+# endif
     else if (wp == cmdwin_win)
 	rettv->vval.v_string = vim_strsave((char_u *)"command");
-#ifdef FEAT_QUICKFIX
+# ifdef FEAT_QUICKFIX
     else if (bt_quickfix(wp->w_buffer))
 	rettv->vval.v_string = vim_strsave((char_u *)
 		(wp->w_llist_ref != NULL ? "loclist" : "quickfix"));
-#endif
+# endif
 
 }
 
@@ -1190,10 +1218,14 @@ f_winrestcmd(typval_T *argvars UNUSED, typval_T *rettv)
 	winnr = 1;
 	FOR_ALL_WINDOWS(wp)
 	{
-	    sprintf((char *)buf, ":%dresize %d|", winnr, wp->w_height);
-	    ga_concat(&ga, buf);
-	    sprintf((char *)buf, "vert :%dresize %d|", winnr, wp->w_width);
-	    ga_concat(&ga, buf);
+	    size_t  buflen;
+
+	    buflen = vim_snprintf_safelen((char *)buf, sizeof(buf),
+		":%dresize %d|", winnr, wp->w_height);
+	    ga_concat_len(&ga, buf, buflen);
+	    buflen = vim_snprintf_safelen((char *)buf, sizeof(buf),
+		"vert :%dresize %d|", winnr, wp->w_width);
+	    ga_concat_len(&ga, buf, buflen);
 	    ++winnr;
 	}
     }
@@ -1229,10 +1261,10 @@ f_winrestview(typval_T *argvars, typval_T *rettv UNUSED)
 
     if (dict_has_key(dict, "topline"))
 	set_topline(curwin, (linenr_T)dict_get_number(dict, "topline"));
-#ifdef FEAT_DIFF
+# ifdef FEAT_DIFF
     if (dict_has_key(dict, "topfill"))
 	curwin->w_topfill = (int)dict_get_number(dict, "topfill");
-#endif
+# endif
     if (dict_has_key(dict, "leftcol"))
 	curwin->w_leftcol = (colnr_T)dict_get_number(dict, "leftcol");
     if (dict_has_key(dict, "skipcol"))
@@ -1247,9 +1279,9 @@ f_winrestview(typval_T *argvars, typval_T *rettv UNUSED)
 	curwin->w_topline = 1;
     if (curwin->w_topline > curbuf->b_ml.ml_line_count)
 	curwin->w_topline = curbuf->b_ml.ml_line_count;
-#ifdef FEAT_DIFF
+# ifdef FEAT_DIFF
     check_topfill(curwin, TRUE);
-#endif
+# endif
 }
 
 /*
@@ -1271,9 +1303,9 @@ f_winsaveview(typval_T *argvars UNUSED, typval_T *rettv)
     dict_add_number(dict, "curswant", (long)curwin->w_curswant);
 
     dict_add_number(dict, "topline", (long)curwin->w_topline);
-#ifdef FEAT_DIFF
+# ifdef FEAT_DIFF
     dict_add_number(dict, "topfill", (long)curwin->w_topfill);
-#endif
+# endif
     dict_add_number(dict, "leftcol", (long)curwin->w_leftcol);
     dict_add_number(dict, "skipcol", (long)curwin->w_skipcol);
 }
@@ -1297,8 +1329,7 @@ f_winwidth(typval_T *argvars, typval_T *rettv)
 }
 #endif // FEAT_EVAL
 
-#if defined(FEAT_EVAL) || defined(FEAT_PYTHON) || defined(FEAT_PYTHON3) \
-	|| defined(PROTO)
+#if defined(FEAT_EVAL) || defined(FEAT_PYTHON) || defined(FEAT_PYTHON3)
 /*
  * Set "win" to be the curwin and "tp" to be the current tab page.
  * restore_win() MUST be called to undo, also when FAIL is returned.
@@ -1344,13 +1375,8 @@ switch_win_noblock(
 	switchwin->sw_curtab = curtab;
 	if (no_display)
 	{
-	    curtab->tp_firstwin = firstwin;
-	    curtab->tp_lastwin = lastwin;
-	    curtab->tp_topframe = topframe;
-	    curtab = tp;
-	    firstwin = curtab->tp_firstwin;
-	    lastwin = curtab->tp_lastwin;
-	    topframe = curtab->tp_topframe;
+	    unuse_tabpage(curtab);
+	    use_tabpage(tp);
 	}
 	else
 	    goto_tabpage_tp(tp, FALSE, FALSE);
@@ -1388,13 +1414,12 @@ restore_win_noblock(
     {
 	if (no_display)
 	{
-	    curtab->tp_firstwin = firstwin;
-	    curtab->tp_lastwin = lastwin;
-	    curtab->tp_topframe = topframe;
-	    curtab = switchwin->sw_curtab;
-	    firstwin = curtab->tp_firstwin;
-	    lastwin = curtab->tp_lastwin;
-	    topframe = curtab->tp_topframe;
+	    win_T	*old_tp_curwin = curtab->tp_curwin;
+
+	    unuse_tabpage(curtab);
+	    // Don't change the curwin of the tabpage we temporarily visited.
+	    curtab->tp_curwin = old_tp_curwin;
+	    use_tabpage(switchwin->sw_curtab);
 	}
 	else
 	    goto_tabpage_tp(switchwin->sw_curtab, FALSE, FALSE);

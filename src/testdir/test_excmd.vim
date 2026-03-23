@@ -1,8 +1,6 @@
 " Tests for various Ex commands.
 
-source check.vim
-source shared.vim
-source term_util.vim
+source util/screendump.vim
 
 func Test_ex_delete()
   new
@@ -238,8 +236,15 @@ endfunc
 func Test_language_cmd()
   CheckFeature multi_lang
 
-  call assert_fails('language ctype non_existing_lang', 'E197:')
-  call assert_fails('language time non_existing_lang', 'E197:')
+  " OpenBSD allows nearly arbitrary locale names, since it largely ignores them
+  " (see setlocale(3)). One useful exception for this test is that in doesn't
+  " allow names containing dots unless they end in '.UTF-8'.
+  "
+  " Windows also allows nonsensical locale names, though it seems to reject
+  " names with multiple underscores (possibly expecting 'language_region', but
+  " not 'language_region_additional').
+  call assert_fails('language ctype non_existing_lang.bad', 'E197:')
+  call assert_fails('language time non_existing_lang.bad', 'E197:')
 endfunc
 
 " Test for the :confirm command dialog
@@ -702,6 +707,8 @@ func Test_address_line_overflow()
   call setline(1, range(100))
   call assert_fails('|.44444444444444444444444', 'E1247:')
   call assert_fails('|.9223372036854775806', 'E1247:')
+  call assert_fails('.44444444444444444444444d', 'E1247:')
+  call assert_equal(range(100)->map('string(v:val)'), getline(1, '$'))
 
   $
   yank 77777777777777777777
@@ -736,6 +743,21 @@ endfunc
 " catch address lines overflow
 func Test_ex_address_range_overflow()
   call assert_fails(':--+foobar', 'E492:')
+endfunc
+
+func Test_drop_modified_file()
+  CheckScreendump
+  let lines =<< trim END
+  call setline(1, 'The quick brown fox jumped over the lazy dogs')
+  END
+  call writefile([''], 'Xdrop_modified.txt', 'D')
+  call writefile(lines, 'Xtest_drop_modified', 'D')
+  let buf = RunVimInTerminal('-S Xtest_drop_modified Xdrop_modified.txt', {'rows': 10,'columns': 40})
+  call term_sendkeys(buf, ":drop Xdrop_modified.txt\<CR>")
+  call VerifyScreenDump(buf, 'Test_drop_modified_1', {})
+
+  " clean up
+  call StopVimInTerminal(buf)
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

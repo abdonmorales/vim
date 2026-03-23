@@ -2,12 +2,11 @@
 "     '" Last Change:  '
 "
 language C
-silent new ../vim.vim
 normal gg
 let pat = '^"\s*Last\s*Change:\s\+'
 let lnum = search(pat, 'We', 10)
 if lnum > 0
-   exec 'norm! lD"=strftime("%b %d, %Y")' . "\rp"
+   exec 'norm! lD"=strftime("%Y %b %d")' . "\rp"
    silent update
 endif
 quitall!

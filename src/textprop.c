@@ -13,7 +13,7 @@
 
 #include "vim.h"
 
-#if defined(FEAT_PROP_POPUP) || defined(PROTO)
+#if defined(FEAT_PROP_POPUP)
 
 /*
  * In a hashtable item "hi_key" points to "pt_name" in a proptype_T.
@@ -372,7 +372,16 @@ f_prop_add_list(typval_T *argvars, typval_T *rettv UNUSED)
     type_name = dict_get_string(dict, "type", FALSE);
 
     if (dict_has_key(dict, "id"))
-	id = dict_get_number(dict, "id");
+    {
+	vimlong_T x;
+	x = dict_get_number(dict, "id");
+	if (x > INT_MAX || x  <= INT_MIN)
+	{
+	    semsg(_(e_val_too_large), dict_get_string(dict, "id", FALSE));
+	    return;
+	}
+	id = (int)x;
+    }
 
     if (get_bufnr_from_arg(&argvars[0], &buf) == FAIL)
 	return;
@@ -424,10 +433,6 @@ get_textprop_id(buf_T *buf)
     // TODO: recycle deleted entries
     return -(buf->b_textprop_text.ga_len + 1);
 }
-
-// Flag that is set when a negative ID isused for a normal text property.
-// It is then impossible to use virtual text properties.
-static int did_use_negative_pop_id = FALSE;
 
 /*
  * Shared between prop_add() and popup_create().
@@ -497,7 +502,16 @@ prop_add_common(
 	end_col = 1;
 
     if (dict_has_key(dict, "id"))
-	id = dict_get_number(dict, "id");
+    {
+	vimlong_T x;
+	x = dict_get_number(dict, "id");
+	if (x > INT_MAX || x  <= INT_MIN)
+	{
+	    semsg(_(e_val_too_large), dict_get_string(dict, "id", FALSE));
+	    goto theend;
+	}
+	id = (int)x;
+    }
 
     if (dict_has_key(dict, "text"))
     {
@@ -581,24 +595,13 @@ prop_add_common(
     if (dict_arg != NULL && get_bufnr_from_arg(dict_arg, &buf) == FAIL)
 	goto theend;
 
-    if (id < 0)
-    {
-	if (buf->b_textprop_text.ga_len > 0)
-	{
-	    emsg(_(e_cannot_use_negative_id_after_adding_textprop_with_text));
-	    goto theend;
-	}
-	did_use_negative_pop_id = TRUE;
-    }
-
     if (text != NULL)
-    {
-	if (did_use_negative_pop_id)
-	{
-	    emsg(_(e_cannot_add_textprop_with_text_after_using_textprop_with_negative_id));
-	    goto theend;
-	}
+	// Always assign an internal negative id; ignore any user-provided id.
 	id = get_textprop_id(buf);
+    else if (id < 0)
+    {
+	emsg(_(e_cannot_use_negative_id));
+	goto theend;
     }
 
     // This must be done _before_ we add the property because property changes
@@ -637,7 +640,7 @@ get_text_props(buf_T *buf, linenr_T lnum, char_u **props, int will_change)
 
     // Fetch the line to get the ml_line_len field updated.
     text = ml_get_buf(buf, lnum, will_change);
-    textlen = STRLEN(text) + 1;
+    textlen = ml_get_buf_len(buf, lnum) + 1;
     proplen = buf->b_ml.ml_line_len - textlen;
     if (proplen == 0)
 	return 0;
@@ -672,16 +675,10 @@ prop_count_above_below(buf_T *buf, linenr_T lnum)
 	mch_memmove(&prop, props + i * sizeof(prop), sizeof(prop));
 	if (prop.tp_col == MAXCOL && text_prop_type_valid(buf, &prop))
 	{
-	    if ((prop.tp_flags & TP_FLAG_ALIGN_BELOW)
+	    if ((prop.tp_flags & (TP_FLAG_ALIGN_ABOVE | TP_FLAG_ALIGN_BELOW))
 		    || (next_right_goes_below
 				     && (prop.tp_flags & TP_FLAG_ALIGN_RIGHT)))
 	    {
-		next_right_goes_below = TRUE;
-		++result;
-	    }
-	    else if (prop.tp_flags & TP_FLAG_ALIGN_ABOVE)
-	    {
-		next_right_goes_below = FALSE;
 		++result;
 	    }
 	    else if (prop.tp_flags & TP_FLAG_ALIGN_RIGHT)
@@ -758,6 +755,11 @@ text_prop_compare(const void *s1, const void *s2)
     tp2 = &text_prop_compare_props[idx2];
     col1 = tp1->tp_col;
     col2 = tp2->tp_col;
+
+    // property that inserts text has priority over one that doesn't
+    if ((tp1->tp_id < 0) != (tp2->tp_id < 0))
+	return tp1->tp_id < 0 ? 1 : -1;
+
     if (col1 == MAXCOL || col2 == MAXCOL)
     {
 	int order1 = text_prop_order(tp1->tp_flags);
@@ -767,10 +769,6 @@ text_prop_compare(const void *s1, const void *s2)
 	if (order1 != order2)
 	    return order1 < order2 ? 1 : -1;
     }
-
-    // property that inserts text has priority over one that doesn't
-    if ((tp1->tp_id < 0) != (tp2->tp_id < 0))
-	return tp1->tp_id < 0 ? 1 : -1;
 
     // check highest priority, defined by the type
     pt1 = text_prop_type_by_id(text_prop_compare_buf, tp1->tp_type);
@@ -863,7 +861,7 @@ set_text_props(linenr_T lnum, char_u *props, int len)
     int	    textlen;
 
     text = ml_get(lnum);
-    textlen = (int)STRLEN(text) + 1;
+    textlen = ml_get_len(lnum) + 1;
     newtext = alloc(textlen + len);
     if (newtext == NULL)
 	return;
@@ -968,7 +966,11 @@ prop_fill_dict(dict_T *dict, textprop_T *prop, buf_T *buf)
 {
     proptype_T *pt;
     int buflocal = TRUE;
-    int virtualtext_prop = prop->tp_id < 0;
+    // A negative tp_id normally means a virtual text property, but a user
+    // may set a negative id for a regular property when no virtual text
+    // properties exist.  Guard against that by checking the index is valid.
+    int virtualtext_prop = prop->tp_id < 0
+			   && -prop->tp_id - 1 < buf->b_textprop_text.ga_len;
 
     dict_add_number(dict, "col", (prop->tp_col == MAXCOL) ? 0 : prop->tp_col);
     if (!virtualtext_prop)
@@ -1090,7 +1092,7 @@ f_prop_clear(typval_T *argvars, typval_T *rettv UNUSED)
 	if (lnum > buf->b_ml.ml_line_count)
 	    break;
 	text = ml_get_buf(buf, lnum, FALSE);
-	len = STRLEN(text) + 1;
+	len = ml_get_buf_len(buf, lnum) + 1;
 	if ((size_t)buf->b_ml.ml_line_len > len)
 	{
 	    did_clear = TRUE;
@@ -1220,7 +1222,7 @@ f_prop_find(typval_T *argvars, typval_T *rettv)
     while (1)
     {
 	char_u	*text = ml_get_buf(buf, lnum, FALSE);
-	size_t	textlen = STRLEN(text) + 1;
+	size_t	textlen = ml_get_buf_len(buf, lnum) + 1;
 	int	count = (int)((buf->b_ml.ml_line_len - textlen)
 							 / sizeof(textprop_T));
 	int	    i;
@@ -1341,7 +1343,7 @@ get_props_in_line(
 	int		add_lnum)
 {
     char_u	*text = ml_get_buf(buf, lnum, FALSE);
-    size_t	textlen = STRLEN(text) + 1;
+    size_t	textlen = ml_get_buf_len(buf, lnum) + 1;
     int		count;
     int		i;
     textprop_T	prop;
@@ -1426,7 +1428,7 @@ get_prop_ids_from_list(list_T *l, int *num_ids)
 {
     int		*prop_ids;
     listitem_T	*li;
-    int		i;
+    int		i = 0;
     int		id;
     int		error;
 
@@ -1436,7 +1438,7 @@ get_prop_ids_from_list(list_T *l, int *num_ids)
     if (prop_ids == NULL)
 	return NULL;
 
-    i = 0;
+    CHECK_LIST_MATERIALIZE(l);
     FOR_ALL_LIST_ITEMS(l, li)
     {
 	error = FALSE;
@@ -1674,13 +1676,11 @@ f_prop_remove(typval_T *argvars, typval_T *rettv)
 	end = buf->b_ml.ml_line_count;
     for (lnum = start; lnum <= end; ++lnum)
     {
-	char_u *text;
 	size_t len;
 
 	if (lnum > buf->b_ml.ml_line_count)
 	    break;
-	text = ml_get_buf(buf, lnum, FALSE);
-	len = STRLEN(text) + 1;
+	len = ml_get_buf_len(buf, lnum) + 1;
 	if ((size_t)buf->b_ml.ml_line_len > len)
 	{
 	    static textprop_T	textprop;  // static because of alignment
@@ -2067,7 +2067,7 @@ list_types(hashtab_T *ht, list_T *l)
  * prop_type_list([{bufnr}])
  */
     void
-f_prop_type_list(typval_T *argvars, typval_T *rettv UNUSED)
+f_prop_type_list(typval_T *argvars, typval_T *rettv)
 {
     buf_T *buf = NULL;
 
@@ -2119,7 +2119,7 @@ clear_ht_prop_types(hashtab_T *ht)
     vim_free(ht);
 }
 
-#if defined(EXITFREE) || defined(PROTO)
+#if defined(EXITFREE)
 /*
  * Free all global property types.
  */
