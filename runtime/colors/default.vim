@@ -1,5 +1,5 @@
 " Vim color file
-" Maintainer:	Abdon Morales <abdon@utexas.edu>
+" Maintainer:	Abdon Morales <abdonm@cs.utexas.edu>
 " Last Change:	2026 Mar 23
 "
 " UTCS Vim default color scheme - loads the Longhorn (Burnt Orange) theme.

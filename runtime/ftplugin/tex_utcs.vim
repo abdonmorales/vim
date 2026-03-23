@@ -1,6 +1,6 @@
 " UTCS LaTeX compile and view support
 " Language:     LaTeX (ft=tex)
-" Maintainer:   Abdon Morales <abdon@utexas.edu>
+" Maintainer:   Abdon Morales <abdonm@cs.utexas.edu>
 " Version:      1.0
 " Last Change:  2026 Mar 23
 "

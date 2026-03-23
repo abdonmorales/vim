@@ -174,6 +174,6 @@ lists to discuss them with Vim users and developers:
 Vim was created by Bram Moolenaar `<Bram@vim.org>`.
 [Bram-Moolenaar](https://vimhelp.org/version9.txt.html#Bram-Moolenaar)
 
-UTCS Vim maintained by Abdon Morales `<abdon@utexas.edu>`.
+UTCS Vim maintained by Abdon Morales `<abdonm@cs.utexas.edu>`.
 
 This is `README.md` for UTCS Vim 9.2 — Spring 2026 Release.

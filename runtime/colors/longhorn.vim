@@ -1,7 +1,7 @@
 " Name:         longhorn
 " Description:  UT Austin Longhorn colorscheme - Burnt Orange and dark tones
-" Author:       Abdon Morales <abdon@utexas.edu>
-" Maintainer:   Abdon Morales <abdon@utexas.edu>
+" Author:       Abdon Morales <abdonm@cs.utexas.edu>
+" Maintainer:   Abdon Morales <abdonm@cs.utexas.edu>
 " License:      Vim License (see `:help license`)
 " Last Change:  2026 Mar 23
 "
