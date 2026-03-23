@@ -169,6 +169,8 @@ Programming language support ~
 |ft_raku.txt|	Filetype plugin for Raku
 |ft_rust.txt|	Filetype plugin for Rust
 |ft_sql.txt|	about the SQL filetype plugin
+|ft_tex_utcs.txt| UTCS LaTeX compile and view support
+|utcs_longhorn.txt| UTCS Longhorn colorscheme and UT Austin theming
 
 Language support ~
 |digraph.txt|	list of available digraphs

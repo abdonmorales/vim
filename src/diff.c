@@ -2417,11 +2417,11 @@ run_linematch_algorithm(diff_T *dp)
 	linematch_nbuffers(diffbufs, diff_length, ndiffs, &decisions, iwhite);
 
     for (size_t i = 0; i < ndiffs; i++)
-	free(diffbufs_mm[i].din_mmfile.ptr); // TODO should this be vim_free ?
+	vim_free(diffbufs_mm[i].din_mmfile.ptr);
 
     apply_linematch_results(dp, decisions_length, decisions);
 
-    free(decisions);
+    vim_free(decisions);
 }
 
 /*

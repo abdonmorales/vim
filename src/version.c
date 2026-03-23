@@ -1702,8 +1702,8 @@ intro_message(
     char	*p;
     static char	*(lines[]) =
     {
-	N_("UTCS VIM - Vi Improved 9.1"),
-	"",
+	N_("UTCS VIM - Vi Improved 9.2"),
+	N_("Spring 2026 Release"),
 	N_("VIM version "),
 	N_("UTCS Version 1.0"),
 	"",

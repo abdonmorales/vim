@@ -314,7 +314,10 @@ mem_realloc(void *ptr, size_t size)
 {
     void *p;
 
-    mem_pre_free(&ptr);
+    // When ptr is NULL, realloc() behaves like malloc().  Don't call
+    // mem_pre_free() in that case as it would dereference before the pointer.
+    if (ptr != NULL)
+	mem_pre_free(&ptr);
     mem_pre_alloc_s(&size);
 
     p = realloc(ptr, size);
@@ -509,7 +512,6 @@ free_all_mem(void)
 
     // Clear registers.
     clear_registers();
-    ResetRedobuff();
     ResetRedobuff();
 
 # if defined(FEAT_CLIENTSERVER) && defined(FEAT_X11)
@@ -733,6 +735,7 @@ ga_grow_inner(garray_T *gap, int n)
 {
     size_t	old_len;
     size_t	new_len;
+    size_t	new_count;
     char_u	*pp;
 
     if (n < gap->ga_growsize)
@@ -744,7 +747,11 @@ ga_grow_inner(garray_T *gap, int n)
     if (n < gap->ga_len / 2)
 	n = gap->ga_len / 2;
 
-    new_len = (size_t)gap->ga_itemsize * (gap->ga_len + n);
+    new_count = (size_t)gap->ga_len + (size_t)n;
+    new_len = (size_t)gap->ga_itemsize * new_count;
+    // Overflow check: ensure the multiplication did not wrap around.
+    if (new_count != 0 && new_len / new_count != (size_t)gap->ga_itemsize)
+	return FAIL;
     pp = vim_realloc(gap->ga_data, new_len);
     if (pp == NULL)
 	return FAIL;

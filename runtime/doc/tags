@@ -2261,6 +2261,10 @@ $quote	eval.txt	/*$quote*
 :Tbreak	terminal.txt	/*:Tbreak*
 :Termdebug	terminal.txt	/*:Termdebug*
 :TermdebugCommand	terminal.txt	/*:TermdebugCommand*
+:TexClean	ft_tex_utcs.txt	/*:TexClean*
+:TexCompile	ft_tex_utcs.txt	/*:TexCompile*
+:TexCompileFull	ft_tex_utcs.txt	/*:TexCompileFull*
+:TexView	ft_tex_utcs.txt	/*:TexView*
 :Texplore	pi_netrw.txt	/*:Texplore*
 :ToggleBreak	terminal.txt	/*:ToggleBreak*
 :Tutor	pi_tutor.txt	/*:Tutor*
@@ -6707,6 +6711,7 @@ cinoptions-values	indent.txt	/*cinoptions-values*
 class	vim9class.txt	/*class*
 class-compile	vim9class.txt	/*class-compile*
 class-method	vim9class.txt	/*class-method*
+classic	utcs_longhorn.txt	/*classic*
 clear-undo	undo.txt	/*clear-undo*
 clearmatches()	builtin.txt	/*clearmatches()*
 client-server	remote.txt	/*client-server*
@@ -7734,6 +7739,7 @@ ft_ps1.txt	ft_ps1.txt	/*ft_ps1.txt*
 ft_raku.txt	ft_raku.txt	/*ft_raku.txt*
 ft_rust.txt	ft_rust.txt	/*ft_rust.txt*
 ft_sql.txt	ft_sql.txt	/*ft_sql.txt*
+ft_tex_utcs.txt	ft_tex_utcs.txt	/*ft_tex_utcs.txt*
 ftdetect	filetype.txt	/*ftdetect*
 ftp	pi_netrw.txt	/*ftp*
 ftplugin	usr_51.txt	/*ftplugin*
@@ -8011,7 +8017,11 @@ g:tar_writeoptions	pi_tar.txt	/*g:tar_writeoptions*
 g:termdebug_config	terminal.txt	/*g:termdebug_config*
 g:termdebugger	terminal.txt	/*g:termdebugger*
 g:terminal_ansi_colors	terminal.txt	/*g:terminal_ansi_colors*
+g:tex_bibtex	ft_tex_utcs.txt	/*g:tex_bibtex*
+g:tex_clean_extensions	ft_tex_utcs.txt	/*g:tex_clean_extensions*
 g:tex_comment_nospell	syntax.txt	/*g:tex_comment_nospell*
+g:tex_compiler	ft_tex_utcs.txt	/*g:tex_compiler*
+g:tex_compiler_flags	ft_tex_utcs.txt	/*g:tex_compiler_flags*
 g:tex_conceal	syntax.txt	/*g:tex_conceal*
 g:tex_fast	syntax.txt	/*g:tex_fast*
 g:tex_flavor	filetype.txt	/*g:tex_flavor*
@@ -8024,6 +8034,7 @@ g:tex_stylish	syntax.txt	/*g:tex_stylish*
 g:tex_subscripts	syntax.txt	/*g:tex_subscripts*
 g:tex_superscripts	syntax.txt	/*g:tex_superscripts*
 g:tex_verbspell	syntax.txt	/*g:tex_verbspell*
+g:tex_viewer	ft_tex_utcs.txt	/*g:tex_viewer*
 g:typescript_host_keyword	syntax.txt	/*g:typescript_host_keyword*
 g:typst_cmd	quickfix.txt	/*g:typst_cmd*
 g:typst_conceal	filetype.txt	/*g:typst_conceal*
@@ -8355,7 +8366,6 @@ help-buffer-options	helphelp.txt	/*help-buffer-options*
 help-context	help.txt	/*help-context*
 help-notation	helphelp.txt	/*help-notation*
 help-summary	usr_02.txt	/*help-summary*
-help-tags	tags	1
 help-toc-install	helphelp.txt	/*help-toc-install*
 help-translated	helphelp.txt	/*help-translated*
 help-writing	helphelp.txt	/*help-writing*
@@ -8944,6 +8954,13 @@ logiPat-manual	pi_logipat.txt	/*logiPat-manual*
 logiPat-operators	pi_logipat.txt	/*logiPat-operators*
 logiPat-pattern	pi_logipat.txt	/*logiPat-pattern*
 long-lines	version5.txt	/*long-lines*
+longhorn	utcs_longhorn.txt	/*longhorn*
+longhorn-colors	utcs_longhorn.txt	/*longhorn-colors*
+longhorn-custom	utcs_longhorn.txt	/*longhorn-custom*
+longhorn-defaults	utcs_longhorn.txt	/*longhorn-defaults*
+longhorn-intro	utcs_longhorn.txt	/*longhorn-intro*
+longhorn-terminal	utcs_longhorn.txt	/*longhorn-terminal*
+longhorn-usage	utcs_longhorn.txt	/*longhorn-usage*
 love	intro.txt	/*love*
 lowercase	change.txt	/*lowercase*
 lpc.vim	syntax.txt	/*lpc.vim*
@@ -11133,6 +11150,13 @@ tex-stopzone	syntax.txt	/*tex-stopzone*
 tex-style	syntax.txt	/*tex-style*
 tex-supersub	syntax.txt	/*tex-supersub*
 tex-sync	syntax.txt	/*tex-sync*
+tex-utcs	ft_tex_utcs.txt	/*tex-utcs*
+tex-utcs-commands	ft_tex_utcs.txt	/*tex-utcs-commands*
+tex-utcs-errors	ft_tex_utcs.txt	/*tex-utcs-errors*
+tex-utcs-intro	ft_tex_utcs.txt	/*tex-utcs-intro*
+tex-utcs-mappings	ft_tex_utcs.txt	/*tex-utcs-mappings*
+tex-utcs-multifile	ft_tex_utcs.txt	/*tex-utcs-multifile*
+tex-utcs-settings	ft_tex_utcs.txt	/*tex-utcs-settings*
 tex-verb	syntax.txt	/*tex-verb*
 tex.vim	syntax.txt	/*tex.vim*
 text-functions	usr_41.txt	/*text-functions*
@@ -11296,6 +11320,7 @@ usr_51.txt	usr_51.txt	/*usr_51.txt*
 usr_52.txt	usr_52.txt	/*usr_52.txt*
 usr_90.txt	usr_90.txt	/*usr_90.txt*
 usr_toc.txt	usr_toc.txt	/*usr_toc.txt*
+utcs_longhorn.txt	utcs_longhorn.txt	/*utcs_longhorn.txt*
 utf-8	mbyte.txt	/*utf-8*
 utf-8-char-arg	mbyte.txt	/*utf-8-char-arg*
 utf-8-in-xwindows	mbyte.txt	/*utf-8-in-xwindows*
