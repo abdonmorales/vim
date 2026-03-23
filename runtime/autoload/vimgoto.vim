@@ -4,9 +4,10 @@ vim9script
 # Contributers: @lacygoill
 #               Shane-XB-Qian
 #               Andrew Radev
-# Last Change:  2025 Sep 21
+#               thinca
+# Last Change:  2026 Feb 10
 #
-# Vim Script to handle jumping to the targets of several types of Vim commands
+# Vim script to handle jumping to the targets of several types of Vim commands
 # (:import, :packadd, :runtime, :colorscheme), and to autoloaded functions of
 # the style <path>#<function_name>.
 #
@@ -41,9 +42,9 @@ export def Find(editcmd: string) #{{{2
     if stridx(curfunc, '#') >= 0
         var parts = split(curfunc, '#')
         var path = $"autoload/{join(parts[0 : -2], '/')}.vim"
-        var resolved_path = globpath(&runtimepath, path)
+        var resolved_path = globpath(&runtimepath, path, 1, 1)
 
-        if resolved_path != ''
+        if !resolved_path->empty()
             var function_pattern: string = $'^\s*\%(:\s*\)\=fun\%[ction]!\=\s\+\zs{curfunc}('
             resolved_path->Open(editcmd, function_pattern)
         endif
