@@ -1,0 +1,161 @@
+*utcs_longhorn.txt*	UTCS Longhorn colorscheme and UT Austin theming
+
+		       UTCS VIM - Longhorn Theme
+		   The University of Texas at Austin
+		   Department of Computer Science
+
+==============================================================================
+CONTENTS						*longhorn*
+
+1. Introduction					|longhorn-intro|
+2. Colors					|longhorn-colors|
+3. Usage					|longhorn-usage|
+4. Compiled-in UT theming			|longhorn-defaults|
+5. Terminal support				|longhorn-terminal|
+6. Customization				|longhorn-custom|
+
+==============================================================================
+1. INTRODUCTION						*longhorn-intro*
+
+The Longhorn colorscheme is the default theme for the UTCS Vim
+distribution.  It uses the official University of Texas at Austin color
+palette, built around Burnt Orange (#BF5700), to give the editor a
+distinctive UT identity while remaining comfortable for long coding sessions.
+
+Longhorn is the default at every level:
+- The compiled-in GUI highlight defaults use the UT Burnt Orange palette.
+- The `default` colorscheme (`:colorscheme default`) loads Longhorn.
+- The `defaults.vim` startup file sets `background=dark` and loads Longhorn
+  when no user vimrc is found.
+
+The original vanilla Vim color scheme is available as |classic|: >
+	:colorscheme classic
+<
+
+==============================================================================
+2. COLORS						*longhorn-colors*
+
+The theme is based on the official UT Austin brand colors:
+
+  Color		Hex		Usage ~
+  Burnt Orange	#BF5700		Primary accent: status line, tabs,
+				keywords, search highlights, cursor
+				line number, mode messages, toolbar
+  White		#FFFFFF		High-contrast text on orange backgrounds
+  Charcoal	#333F48		Inactive UI: status line NC, tab bar,
+				popup menus, vertical split borders
+  Limestone	#D6D2C4		Normal text foreground
+
+Supporting palette:
+  Dark bg	#1a1e24		Main editor background
+  Subtle bg	#252a31		Cursor line, float windows, fold bg
+  Muted orange	#87653a		Line numbers, fold markers
+  Warm orange	#d7875f		Constants, preprocessor, search
+  Green		#87af5f		Strings, diff add, terminal status
+  Blue		#5f87af		Types, diff change
+  Muted purple	#af87af		Special characters
+  Teal		#5fafaf		Underlined text
+  Red		#d75f5f		Errors, diff delete, spell bad
+  Comment grey	#5f6773		Comments (italic in GUI)
+
+==============================================================================
+3. USAGE						*longhorn-usage*
+
+Longhorn is the default.  No action is needed to use it.
+
+To explicitly reload it after switching to another colorscheme: >
+	:colorscheme longhorn
+<
+Or equivalently (since Longhorn IS the default): >
+	:colorscheme default
+<
+
+							*classic*
+To switch to the original vanilla Vim color scheme: >
+	:colorscheme classic
+<
+To make the classic scheme permanent, add to your |vimrc|: >
+	colorscheme classic
+<
+
+The colorscheme sets 'background' to "dark".  For best results in a
+terminal, use a terminal with 256-color or true color support.
+
+For true color (24-bit) in a terminal: >
+	set termguicolors
+<
+
+==============================================================================
+4. COMPILED-IN UT THEMING				*longhorn-defaults*
+
+The UTCS Vim build has the full Longhorn palette baked into the compiled-in
+default highlight groups for the GUI.  This means the UT Burnt Orange
+look is present even when running `vim -u NONE` in a GUI or with
+'termguicolors' enabled.
+
+The following GUI highlight groups use UT colors by default:
+
+  Group			Appearance ~
+  StatusLine		Burnt Orange bg, white bold text
+  StatusLineNC		Charcoal bg, limestone text
+  TabLineSel		Burnt Orange bg, white bold text
+  TabLine		Charcoal bg, limestone text
+  TabLineFill		Dark bg
+  ModeMsg		Burnt Orange text (INSERT, VISUAL, etc.)
+  Title			Burnt Orange bold text (intro screen)
+  IncSearch		Burnt Orange bg, white bold text
+  Search		Burnt Orange bg, white text
+  WildMenu		Burnt Orange bg, white text
+  CursorLineNr		Burnt Orange bold text
+  Directory		Burnt Orange text (file browser)
+  Question		Burnt Orange bold text (prompts)
+  MatchParen		Burnt Orange bold text
+  LineNr		Muted Burnt Orange (#87653a)
+  Pmenu			Charcoal bg, limestone text
+  PmenuSel		Burnt Orange bg, dark text
+  PmenuThumb		Burnt Orange bg
+  Visual		Warm brown selection (#3a3024)
+  Cursor		Burnt Orange bg, dark text
+  NonText		Charcoal text
+  VertSplit		Charcoal
+  Folded/FoldColumn	Subtle bg, muted orange text
+  DiffAdd		Green tint
+  DiffChange		Blue tint
+  DiffDelete		Red tint
+  CursorLine/Column	Subtle bg (#252a31)
+  StatusLineTerm	Green bg (like upstream, muted)
+  ToolbarButton		Burnt Orange bg, dark text
+
+Terminal (cterm) colors are unchanged from upstream Vim to ensure
+compatibility with all 8/16-color terminal emulators.
+
+==============================================================================
+5. TERMINAL SUPPORT					*longhorn-terminal*
+
+The colorscheme provides colors for three terminal environments:
+
+  GUI (gvim)		Full 24-bit color using guifg/guibg
+  256-color term	Closest approximations using ctermfg/ctermbg
+  16-color term		Basic attribute-only (bold, reverse, underline)
+
+The ANSI terminal color palette is also configured via
+|g:terminal_ansi_colors| for the |:terminal| feature, matching the
+Longhorn palette.
+
+==============================================================================
+6. CUSTOMIZATION					*longhorn-custom*
+
+To override specific highlight groups after loading the colorscheme: >
+	colorscheme longhorn
+	hi StatusLine guibg=#333F48
+<
+To change just the accent color while keeping the structure, override
+after loading: >
+	colorscheme longhorn
+	hi StatusLine guifg=#1a1e24 guibg=#5fafaf gui=bold
+	hi TabLineSel guifg=#1a1e24 guibg=#5fafaf gui=bold
+<
+
+==============================================================================
+
+ vim:tw=78:ts=8:noet:ft=help:norl:

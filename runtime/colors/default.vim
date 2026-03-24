@@ -1,24 +1,15 @@
 " Vim color file
-" Maintainer:	The Vim Project <https://github.com/vim/vim>
-" Last Change:	2023 Aug 10
-" Former Maintainer:	Bram Moolenaar <Bram@vim.org>
+" Maintainer:	Abdon Morales <abdonm@cs.utexas.edu>
+" Last Change:	2026 Mar 23
+"
+" UTCS Vim default color scheme - loads the Longhorn (Burnt Orange) theme.
+" The original Vim default is available as ":colorscheme classic".
+" See ":help longhorn" for details on the UTCS theme.
 
-" This is the default color scheme.  It doesn't define the Normal
-" highlighting, it uses whatever the colors used to be.
+" Load the Longhorn colorscheme which sets up everything.
+runtime colors/longhorn.vim
 
-" Set 'background' back to the default.  The value can't always be estimated
-" and is then guessed.
-hi clear Normal
-set bg&
-
-" Remove all existing highlighting and set the defaults.
-hi clear
-
-" Load the syntax highlighting defaults, if it's enabled.
-if exists("syntax_on")
-  syntax reset
-endif
-
-let colors_name = "default"
+" Override the name so :colorscheme reports "default".
+let g:colors_name = "default"
 
 " vim: sw=2

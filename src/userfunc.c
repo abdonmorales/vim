@@ -6195,37 +6195,46 @@ copy_function(ufunc_T *fp, int extra_namelen)
     ga_copy_strings(&fp->uf_args, &ufunc->uf_args);
     ga_copy_strings(&fp->uf_def_args, &ufunc->uf_def_args);
 
+    // Initialize the copy's own type_list so deep-copied types are owned by
+    // the copy and not freed when the original function is freed.
+    ga_init2(&ufunc->uf_type_list, sizeof(type_T *), 10);
+
     if (ufunc->uf_arg_types != NULL)
     {
-	// "uf_arg_types" is an allocated array, make a copy.
+	// "uf_arg_types" is an allocated array, deep-copy the types into the
+	// copy's own type_list to avoid dangling pointers when the original
+	// function is freed.
 	type_T **at = ALLOC_CLEAR_MULT(type_T *, ufunc->uf_args.ga_len);
 	if (at != NULL)
 	{
-	    mch_memmove(at, ufunc->uf_arg_types,
-				     sizeof(type_T *) * ufunc->uf_args.ga_len);
+	    for (int i = 0; i < ufunc->uf_args.ga_len; ++i)
+		at[i] = copy_type(ufunc->uf_arg_types[i],
+						    &ufunc->uf_type_list);
 	    ufunc->uf_arg_types = at;
 	}
     }
 
-    // TODO: how about the types themselves? they can be freed when the
-    // original function is freed:
-    //    type_T	**uf_arg_types;
-    //    type_T	*uf_ret_type;
+    // Deep-copy return type, varargs type, and function type into the copy's
+    // own type_list so they remain valid after the original is freed.
+    if (ufunc->uf_ret_type != NULL)
+	ufunc->uf_ret_type = copy_type(ufunc->uf_ret_type,
+						    &ufunc->uf_type_list);
+    if (ufunc->uf_va_type != NULL)
+	ufunc->uf_va_type = copy_type(ufunc->uf_va_type,
+						    &ufunc->uf_type_list);
+    if (ufunc->uf_func_type != NULL)
+	ufunc->uf_func_type = copy_type(ufunc->uf_func_type,
+						    &ufunc->uf_type_list);
 
-    // make uf_type_list empty
-    ga_init(&ufunc->uf_type_list);
-
-    // TODO:   partial_T	*uf_partial;
+    // Increment partial refcount if shared.
+    if (ufunc->uf_partial != NULL)
+	++ufunc->uf_partial->pt_refcount;
 
     // copy generic function related state
     copy_generic_function(fp, ufunc);
 
     if (ufunc->uf_va_name != NULL)
 	ufunc->uf_va_name = vim_strsave(ufunc->uf_va_name);
-
-    // TODO:
-    //    type_T	*uf_va_type;
-    //    type_T	*uf_func_type;
 
     ufunc->uf_block_depth = 0;
     ufunc->uf_block_ids = NULL;

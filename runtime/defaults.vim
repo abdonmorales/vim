@@ -129,6 +129,10 @@ if 1
 
 endif
 
+" UTCS: Set dark background for the Longhorn theme.
+" Revert with ":set background=light".
+set background=dark
+
 " Switch syntax highlighting on when the terminal has colors or when using the
 " GUI (which always has colors).
 if &t_Co > 2 || has("gui_running")
@@ -138,6 +142,11 @@ if &t_Co > 2 || has("gui_running")
   " I like highlighting strings inside C comments.
   " Revert with ":unlet g:c_comment_strings".
   let c_comment_strings=1
+
+  " UTCS: Load the Longhorn (Burnt Orange) colorscheme.
+  " This is the default look for the UTCS Vim distribution.
+  " For the original Vim appearance, use ":colorscheme classic".
+  silent! colorscheme longhorn
 endif
 
 " Convenient command to see the difference between the current buffer and the
