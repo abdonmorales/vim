@@ -1,0 +1,217 @@
+name: Release Build
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-linux:
+    strategy:
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libncurses-dev libgtk-3-dev libxt-dev \
+            libsodium-dev libacl1-dev libgpm-dev \
+            lua5.4 liblua5.4-dev \
+            python3-dev ruby-dev tcl-dev
+
+      - name: Configure
+        run: |
+          cd src
+          ./configure \
+            --with-features=huge \
+            --enable-multibyte \
+            --enable-python3interp=yes \
+            --enable-rubyinterp=yes \
+            --enable-luainterp=yes \
+            --enable-tclinterp=yes \
+            --enable-terminal \
+            --enable-fail-if-missing \
+            --prefix=/usr/local
+
+      - name: Build
+        run: make -C src -j$(nproc)
+
+      - name: Package
+        run: |
+          make -C src DESTDIR=${{ github.workspace }}/install install
+          cd ${{ github.workspace }}/install
+          tar czf ${{ github.workspace }}/utcs-vim-linux-${{ matrix.arch }}.tar.gz .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-${{ matrix.arch }}
+          path: utcs-vim-linux-${{ matrix.arch }}.tar.gz
+
+  build-macos:
+    strategy:
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-14
+          - arch: x86_64
+            runner: macos-13
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: brew install libsodium lua
+
+      - name: Configure
+        run: |
+          cd src
+          ./configure \
+            --with-features=huge \
+            --enable-multibyte \
+            --enable-luainterp=yes \
+            --enable-terminal \
+            --prefix=/usr/local
+
+      - name: Build
+        run: make -C src -j$(sysctl -n hw.ncpu)
+
+      - name: Package
+        run: |
+          make -C src DESTDIR=${{ github.workspace }}/install install
+          cd ${{ github.workspace }}/install
+          tar czf ${{ github.workspace }}/utcs-vim-macos-${{ matrix.arch }}.tar.gz .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-${{ matrix.arch }}
+          path: utcs-vim-macos-${{ matrix.arch }}.tar.gz
+
+  build-windows:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Build
+        shell: cmd
+        run: |
+          cd src
+          nmake -f Make_mvc.mak GUI=yes FEATURES=HUGE IME=yes ICONV=yes TERMINAL=yes
+
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path package
+          Copy-Item src\vim.exe package\
+          Copy-Item src\gvim.exe package\
+          Copy-Item src\vimrun.exe package\ -ErrorAction SilentlyContinue
+          Copy-Item src\xxd\xxd.exe package\ -ErrorAction SilentlyContinue
+          Copy-Item -Recurse runtime package\runtime
+          Compress-Archive -Path package\* -DestinationPath utcs-vim-windows-x64.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-x64
+          path: utcs-vim-windows-x64.zip
+
+  create-release:
+    needs: [build-linux, build-macos, build-windows]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create source tarball
+        run: |
+          git archive --format=tar.gz \
+            --prefix=utcs-vim-${GITHUB_REF_NAME}-source/ \
+            -o artifacts/utcs-vim-${GITHUB_REF_NAME}-source.tar.gz \
+            HEAD
+
+      - name: List artifacts
+        run: find artifacts -type f
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "UTCS Vim 9.2 — Spring 2026 Release"
+          draft: false
+          prerelease: false
+          generate_release_notes: false
+          body: |
+            ## UTCS Vim 9.2 — Spring 2026 Release
+
+            A customized build of Vim for **UT Austin Computer Science** students and faculty.
+
+            ### What's New
+
+            - **Longhorn Theme (Default)**: Burnt Orange (`#BF5700`) colorscheme baked into the binary — status line, tab bar, search, cursor, and all GUI highlight groups use the official UT Austin palette. Original Vim colors available via `:colorscheme classic`.
+            - **LaTeX Support**: Built-in `:TexCompile`, `:TexCompileFull`, `:TexView`, `:TexClean` commands with quickfix integration, multi-file project support (`% !TEX root`), and configurable compiler/viewer settings.
+            - **Memory Bug Fixes** (5 fixes):
+              - `src/diff.c`: `free()` → `vim_free()` mismatch in `run_linematch_algorithm()`
+              - `src/userfunc.c`: Use-after-free in `copy_function()` — shallow-copied type pointers now deep-copied
+              - `src/alloc.c`: NULL pointer crash in `mem_realloc()` with `MEM_PROFILE` builds
+              - `src/alloc.c`: Duplicate `ResetRedobuff()` call removed
+              - `src/alloc.c`: Integer overflow protection in `ga_grow_inner()`
+            - **UTCS Branding**: Intro screen shows "UTCS VIM - Vi Improved 9.2" and "Spring 2026 Release"
+
+            ### Downloads
+
+            | File | Platform | Description |
+            |------|----------|-------------|
+            | `utcs-vim-linux-x86_64.tar.gz` | Linux x86_64 | Full install tree (extract to `/`) |
+            | `utcs-vim-linux-arm64.tar.gz` | Linux ARM64 | Full install tree (extract to `/`) |
+            | `utcs-vim-macos-arm64.tar.gz` | macOS Apple Silicon | Full install tree (extract to `/`) |
+            | `utcs-vim-macos-x86_64.tar.gz` | macOS Intel | Full install tree (extract to `/`) |
+            | `utcs-vim-windows-x64.zip` | Windows x64 | Portable — vim.exe + gvim.exe + runtime |
+            | `utcs-vim-*-source.tar.gz` | All | Source code |
+
+            ### Install from Binary
+
+            **Linux / macOS:**
+            ```bash
+            sudo tar xzf utcs-vim-linux-x86_64.tar.gz -C /
+            ```
+
+            **Windows:** Extract the zip and run `vim.exe` or `gvim.exe`.
+
+            ### Build from Source
+
+            ```bash
+            git clone https://github.com/abdonmorales/vim.git
+            cd vim/src
+            make -j$(nproc)
+            sudo make install
+            ```
+
+            ### Help Topics
+
+            - `:help longhorn` — Longhorn theme documentation
+            - `:help tex-utcs` — LaTeX plugin documentation
+            - `:help classic` — How to switch to vanilla Vim colors
+
+            ---
+            Maintainer: Abdon Morales <abdonm@cs.utexas.edu>
+          files: |
+            artifacts/**/*.tar.gz
+            artifacts/**/*.zip
