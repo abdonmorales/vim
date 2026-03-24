@@ -66,7 +66,8 @@ jobs:
           - arch: arm64
             runner: macos-14
           - arch: x86_64
-            runner: macos-13
+            runner: macos-14
+            cross: true
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
@@ -77,15 +78,26 @@ jobs:
       - name: Configure
         run: |
           cd src
+          EXTRA_FLAGS=""
+          if [ "${{ matrix.cross }}" = "true" ]; then
+            EXTRA_FLAGS="--build=aarch64-apple-darwin --host=x86_64-apple-darwin"
+            export CFLAGS="-arch x86_64"
+            export LDFLAGS="-arch x86_64"
+          fi
           ./configure \
             --with-features=huge \
             --enable-multibyte \
-            --enable-luainterp=yes \
             --enable-terminal \
-            --prefix=/usr/local
+            --prefix=/usr/local \
+            $EXTRA_FLAGS
 
       - name: Build
-        run: make -C src -j$(sysctl -n hw.ncpu)
+        run: |
+          EXTRA=""
+          if [ "${{ matrix.cross }}" = "true" ]; then
+            EXTRA="CFLAGS='-arch x86_64' LDFLAGS='-arch x86_64'"
+          fi
+          eval make -C src -j$(sysctl -n hw.ncpu) $EXTRA
 
       - name: Package
         run: |
