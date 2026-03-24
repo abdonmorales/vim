@@ -107,21 +107,39 @@ jobs:
       - name: Setup MSVC
         uses: ilammy/msvc-dev-cmd@v1
 
-      - name: Build
+      - name: Build console vim.exe
         shell: cmd
         run: |
           cd src
-          nmake -f Make_mvc.mak GUI=yes FEATURES=HUGE IME=yes ICONV=yes TERMINAL=yes
+          nmake -f Make_mvc.mak FEATURES=HUGE IME=yes TERMINAL=yes
+
+      - name: Build GUI gvim.exe
+        shell: cmd
+        run: |
+          cd src
+          nmake -f Make_mvc.mak GUI=yes FEATURES=HUGE IME=yes TERMINAL=yes
+
+      - name: Build xxd
+        shell: cmd
+        run: |
+          cd src\xxd
+          nmake -f Make_mvc.mak
 
       - name: Package
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path package
-          Copy-Item src\vim.exe package\
-          Copy-Item src\gvim.exe package\
+          # Find and copy executables
+          Get-ChildItem -Path src -Filter "*.exe" -Recurse | ForEach-Object { Write-Host "Found: $($_.FullName)" }
+          Copy-Item src\vim.exe package\ -ErrorAction SilentlyContinue
+          Copy-Item src\gvim.exe package\ -ErrorAction SilentlyContinue
           Copy-Item src\vimrun.exe package\ -ErrorAction SilentlyContinue
           Copy-Item src\xxd\xxd.exe package\ -ErrorAction SilentlyContinue
           Copy-Item -Recurse runtime package\runtime
+          # Verify we have at least one executable
+          $exes = Get-ChildItem package\*.exe
+          if ($exes.Count -eq 0) { throw "No executables found in package!" }
+          Write-Host "Packaging: $($exes.Name -join ', ')"
           Compress-Archive -Path package\* -DestinationPath utcs-vim-windows-x64.zip
 
       - name: Upload artifact
